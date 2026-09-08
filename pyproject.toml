@@ -9,6 +9,8 @@ authors = [
 requires-python = ">=3.14"
 dependencies = [
     "requests>=2.34.2",
+    "tqdm>=4.70.0",
+    "truststore>=0.10.4",
 ]
 
 [project.scripts]

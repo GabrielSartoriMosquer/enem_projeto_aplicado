@@ -1,0 +1,3 @@
+LINK_DOWNLOAD = 'https://download.inep.gov.br/microdados/microdados_enem_ANO.zip'
+RAIZ_PROJETO = Path(__file__).resolve().parent.parent
+ANOS = [2018, 2019, 2020, 2021, 2022, 2023, 2025, 2025] # Trabalharemos com 8 anos

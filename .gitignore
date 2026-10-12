@@ -11,3 +11,5 @@ wheels/
 
 # Zip extracted
 *.zip
+
+data/

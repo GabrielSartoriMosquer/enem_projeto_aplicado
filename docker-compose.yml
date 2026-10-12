@@ -1,0 +1,7 @@
+services:
+  etl:
+    build: .
+    volumes:
+      - ./data:/data
+    environment:
+      DATA_DIR: /data

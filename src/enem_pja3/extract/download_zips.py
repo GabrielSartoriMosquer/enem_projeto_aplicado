@@ -4,7 +4,6 @@ from tqdm import tqdm # Barra de progesso dos downloads
 from requests.adapters import HTTPAdapter 
 from urllib3.util.retry import Retry # Para re-tentar o GET caso sejam disparados códigos de erro específicos
 from config.yaml import RAIZ_PROJETO, ANOS, LINK_DOWNLOAD
-
 truststore.inject_into_ssl()
 
 retry = Retry(

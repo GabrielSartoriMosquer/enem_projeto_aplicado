@@ -25,13 +25,16 @@ def gerar_volumetria() -> str:
 
     total_linhas, total_zip, total_csv, total_silver = 0, 0, 0, 0
     for ano in ANOS:
+        # Número de inscritos: no formato novo contamos pelo arquivo de resultados
+        tabela = "enem" if ano in ANOS_FORMATO_ANTIGO else "resultados"
+        parquet = DATA_DIR / "silver" / tabela / f"ano={ano}" / "dados.parquet"
+        if not parquet.exists():
+            continue  # ano que não foi processado
+
         zip_mb = tamanho_mb(DATA_DIR / "bronze" / "zips" / f"microdados_enem_{ano}.zip")
         csv_mb = tamanho_mb(DATA_DIR / "bronze" / "csv" / f"ano={ano}")
         silver_mb = sum(tamanho_mb(p) for p in DATA_DIR.glob(f"silver/*/ano={ano}/dados.parquet"))
-
-        # Número de inscritos: no formato novo contamos pelo arquivo de resultados
-        tabela = "enem" if ano in ANOS_FORMATO_ANTIGO else "resultados"
-        linhas = contar_linhas(DATA_DIR / "silver" / tabela / f"ano={ano}" / "dados.parquet")
+        linhas = contar_linhas(parquet)
 
         texto += f"| {ano} | {linhas} | {zip_mb:.1f} | {csv_mb:.1f} | {silver_mb:.1f} |\n"
         total_linhas += linhas

@@ -8,6 +8,14 @@ GOLD = DATA_DIR / "gold"
 # ano e estado, o DuckDB consegue pular os pedaços do arquivo que não interessam.
 
 
+def arquivos_silver(*tabelas: str) -> list[str]:
+    """Lista os Parquets da silver que existem (pode ter rodado só alguns anos)"""
+    arquivos = []
+    for tabela in tabelas:
+        arquivos += [str(p) for p in sorted(SILVER.glob(f"{tabela}/*/dados.parquet"))]
+    return arquivos
+
+
 def carregar_notas():
     """Junta as notas dos 8 anos em um Parquet só (base para percentil e Z-Score)"""
     destino = GOLD / "enem_notas.parquet"
@@ -21,7 +29,7 @@ def carregar_notas():
                 TP_PRESENCA_CN, TP_PRESENCA_CH, TP_PRESENCA_LC, TP_PRESENCA_MT,
                 NU_NOTA_CN, NU_NOTA_CH, NU_NOTA_LC, NU_NOTA_MT, TP_LINGUA,
                 NU_NOTA_REDACAO, TP_STATUS_REDACAO
-            FROM read_parquet(['{SILVER}/enem/*/dados.parquet', '{SILVER}/resultados/*/dados.parquet'],
+            FROM read_parquet({arquivos_silver('enem', 'resultados')},
                               hive_partitioning = true, union_by_name = true)
             ORDER BY NU_ANO, SG_UF_PROVA
         ) TO '{destino}' (FORMAT parquet, COMPRESSION zstd)
@@ -39,7 +47,7 @@ def carregar_perfil():
                 SG_UF_PROVA,
                 TP_FAIXA_ETARIA, TP_SEXO, TP_COR_RACA, TP_ST_CONCLUSAO, IN_TREINEIRO,
                 COLUMNS('^Q\\d{{3}}$')
-            FROM read_parquet(['{SILVER}/enem/*/dados.parquet', '{SILVER}/participantes/*/dados.parquet'],
+            FROM read_parquet({arquivos_silver('enem', 'participantes')},
                               hive_partitioning = true, union_by_name = true)
             ORDER BY NU_ANO, SG_UF_PROVA
         ) TO '{destino}' (FORMAT parquet, COMPRESSION zstd)

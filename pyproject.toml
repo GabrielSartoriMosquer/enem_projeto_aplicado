@@ -8,14 +8,25 @@ authors = [
 ]
 requires-python = ">=3.14"
 dependencies = [
+    "certifi>=2026.7.22",
+    "duckdb>=1.5.6",
     "requests>=2.34.2",
     "tqdm>=4.70.0",
-    "truststore>=0.10.4",
 ]
 
 [project.scripts]
-enem-pja3 = "enem_pja3:main"
+enem-pja3 = "enem_pja3.pipeline:main"
 
 [build-system]
 requires = ["uv_build>=0.12.10,<0.13.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]

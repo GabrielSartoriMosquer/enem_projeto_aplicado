@@ -11,3 +11,7 @@ wheels/
 
 # Zip extracted
 *.zip
+
+data/
+# Testes
+.coverage

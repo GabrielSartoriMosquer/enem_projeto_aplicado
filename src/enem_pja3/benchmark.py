@@ -55,6 +55,25 @@ def main():
         con.sql(CONSULTA.format(fonte=fonte, filtro=filtro)).fetchall()
         texto += f"| {nome} | {time.time() - inicio:.3f} |\n"
 
+    # Meta da apresentação: P95 das consultas <= 3 s. Aqui medimos só a parte do banco (gold),
+    # com a mesma consulta para todos os anos, UFs e áreas.
+    gold = f"'{DATA_DIR}/gold/enem_notas.parquet'"
+    ufs = [linha[0] for linha in con.sql(f"SELECT DISTINCT SG_UF_PROVA FROM {gold} WHERE SG_UF_PROVA IS NOT NULL").fetchall()]
+    tempos = []
+    for ano in range(2018, 2026):
+        for uf in ufs:
+            for area in ["CN", "CH", "LC", "MT"]:
+                sql = f"""SELECT quantile_cont(CAST(NU_NOTA_{area} AS DOUBLE), [0.25, 0.5, 0.75]),
+                                 avg(NU_NOTA_{area}), stddev(CAST(NU_NOTA_{area} AS DOUBLE))
+                          FROM {gold} WHERE NU_ANO = {ano} AND SG_UF_PROVA = '{uf}' AND TP_PRESENCA_{area} = 1"""
+                inicio = time.time()
+                con.sql(sql).fetchall()
+                tempos.append(time.time() - inicio)
+    tempos.sort()
+    p95 = tempos[int(0.95 * len(tempos)) - 1]
+    texto += f"\n## P95 na gold\n\n{len(tempos)} consultas (8 anos x {len(ufs)} UFs x 4 áreas): "
+    texto += f"mediana {1000 * tempos[len(tempos) // 2]:.1f} ms, P95 {1000 * p95:.1f} ms, máximo {1000 * tempos[-1]:.1f} ms.\n"
+
     PASTA_DOCS.mkdir(exist_ok=True)
     (PASTA_DOCS / "benchmark.md").write_text(texto)
     print(texto)

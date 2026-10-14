@@ -42,6 +42,10 @@ flowchart LR
 - **Silver** (`data/silver/`): um Parquet por ano, só com as colunas que vamos usar, com tipos
   menores (ex.: `UTINYINT` para códigos, `DECIMAL(5,1)` para notas) e compressão ZSTD.
 - **Gold** (`data/gold/`): os 8 anos juntos em dois arquivos, ordenados por ano e UF.
+  - `enem_notas.parquet`: notas, presença, UF e escola. De 2018 a 2023 também traz
+    `TIPO_ESCOLA`, `ESCOLARIDADE_PAI`, `ESCOLARIDADE_MAE` e `RENDA_FAMILIAR` na mesma linha
+    (em 2024 e 2025 ficam vazias, ver abaixo).
+  - `enem_perfil.parquet`: perfil e questionário completo, com as mesmas colunas harmonizadas.
 
 Os tamanhos de cada camada estão em [docs/volumetria.md](docs/volumetria.md) e a comparação
 entre formatos em [docs/benchmark.md](docs/benchmark.md).
@@ -66,6 +70,15 @@ uv run python -m enem_pja3.benchmark
 
 Se o pipeline parar no meio, é só rodar de novo: zips e CSVs que já existem são pulados.
 
+## Testes
+
+```bash
+uv run pytest --cov=enem_pja3.transform --cov=enem_pja3.load --cov=enem_pja3.extract.extract_zips
+```
+
+Os testes usam CSVs pequenos criados na hora (em latin-1, como os do INEP) e conferem os tipos,
+os valores nulos, o contrato de colunas e a harmonização do questionário.
+
 ## Arquivos
 
 - `src/enem_pja3/config.py`: anos, link do INEP e pasta dos dados
@@ -78,12 +91,18 @@ Se o pipeline parar no meio, é só rodar de novo: zips e CSVs que já existem s
 
 ## Problemas que encontramos nos dados
 
+- **LGPD.** Desde a edição 2020 o INEP usa um "modelo simplificado" dos microdados: sem código da
+  escola, com faixa etária no lugar da idade e sem município de residência. Os arquivos de 2018 e
+  2019 que baixamos já vêm assim. Até 2023 perfil e nota continuam na mesma linha.
 - **Formato mudou em 2024.** Até 2023 era um CSV só por ano. Em 2024 e 2025 são dois:
   `PARTICIPANTES` (perfil e questionário) e `RESULTADOS` (escola e notas), e não tem coluna
   que ligue um ao outro. Então só dá para cruzar nota com perfil socioeconômico de 2018 a 2023.
 - **Questionário muda de um ano para outro.** 2018 tem 27 perguntas, 2019 a 2023 têm 25 e
-  2024/2025 têm 23. A mesma coluna (ex.: `Q006`) pode ser outra pergunta em outro ano, então
-  é preciso olhar o dicionário de cada ano antes de comparar.
+  2024/2025 têm 23. Exemplo: a renda da família é a `Q006` até 2023 e a `Q007` depois (em 2024 a
+  `Q006` virou "Você possui renda?"). O tipo de escola é o `TP_ESCOLA` até 2023 e a `Q023` depois.
+  Por isso a gold tem colunas com nome único (`RENDA_FAMILIAR`, `TIPO_ESCOLA`...).
+- **Códigos do `TP_ESCOLA` mudam.** Em 2018, 3 = exterior e 4 = privada. Em 2019 e 2020,
+  3 = privada e 4 = exterior. De 2021 em diante só existem 1, 2 e 3. A conversão está no `load.py`.
 - **Certificado do site do INEP.** O servidor não manda o certificado intermediário e o
   `requests` dá erro de SSL. Em vez de desligar a verificação, salvamos esse certificado em
   `src/enem_pja3/certs/`.

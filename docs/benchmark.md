@@ -12,6 +12,10 @@
 
 | Lendo de | Tempo (s) |
 |---|---:|
-| CSV original | 6.976 |
-| Parquet da silver | 0.017 |
-| Parquet da gold (8 anos) | 0.027 |
+| CSV original | 6.800 |
+| Parquet da silver | 0.014 |
+| Parquet da gold (8 anos) | 0.026 |
+
+## P95 na gold
+
+864 consultas (8 anos x 27 UFs x 4 áreas): mediana 22.6 ms, P95 36.8 ms, máximo 77.6 ms.

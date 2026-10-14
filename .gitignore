@@ -13,3 +13,5 @@ wheels/
 *.zip
 
 data/
+# Testes
+.coverage

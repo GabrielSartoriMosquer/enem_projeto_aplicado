@@ -5,3 +5,5 @@ services:
       - ./data:/data
     environment:
       DATA_DIR: /data
+      # Data lake no Azure (opcional), lido do arquivo .env. Ver o README
+      AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING:-}

@@ -70,6 +70,56 @@ uv run python -m enem_pja3.benchmark
 
 Se o pipeline parar no meio, é só rodar de novo: zips e CSVs que já existem são pulados.
 
+## Data lake no Azure
+
+As camadas também podem ficar num data lake (ADLS Gen2), com um container para cada uma:
+`bronze`, `silver` e `gold`. O caminho dentro do container é o mesmo da pasta `data/`. O
+processamento continua sendo feito no disco local, e o lake guarda o resultado de cada camada:
+
+- **bronze**: só o zip do INEP. Se o zip já está no lake, o pipeline baixa de lá em vez de ir no
+  site do INEP. Os CSVs não vão para o lake, porque dá para recriar a partir do zip.
+- **silver**: cada ano processado é enviado. Antes de montar a gold, a silver local é sincronizada
+  com o lake, então a gold sempre tem todos os anos do lake, mesmo rodando só alguns.
+- **gold**: os dois Parquets finais.
+
+O pipeline compara o MD5 de cada arquivo e só envia ou baixa o que mudou. Sem as variáveis abaixo
+ele não usa o lake.
+
+Para rodar com o lake, faça login no Azure e informe o nome da conta:
+
+```bash
+az login
+AZURE_STORAGE_ACCOUNT=stpanoramaenem uv run enem-pja3 2023
+```
+
+No Docker não tem `az login`, então usamos a connection string num arquivo `.env` (que está no
+`.gitignore`, nunca suba ele para o Git):
+
+```bash
+echo "AZURE_STORAGE_CONNECTION_STRING=$(az storage account show-connection-string \
+  -g rg-panorama-enem -n stpanoramaenem --query connectionString -o tsv)" > .env
+docker compose run --rm etl
+```
+
+Como o lake foi criado (a assinatura Azure for Students só permite algumas regiões; `chilecentral`
+é a mais perto do Brasil):
+
+```bash
+az storage account create -g rg-panorama-enem -n stpanoramaenem -l chilecentral \
+  --sku Standard_LRS --kind StorageV2 --hns true --min-tls-version TLS1_2 \
+  --allow-blob-public-access false
+for camada in bronze silver gold; do
+  az storage container-rm create -g rg-panorama-enem --storage-account stpanoramaenem -n $camada
+done
+```
+
+Para dar acesso a outra pessoa do grupo (precisa ser feito por quem é dono da assinatura):
+
+```bash
+az role assignment create --role "Storage Blob Data Contributor" --assignee <email> \
+  --scope $(az storage account show -g rg-panorama-enem -n stpanoramaenem --query id -o tsv)
+```
+
 ## Testes
 
 ```bash

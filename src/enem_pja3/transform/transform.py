@@ -115,19 +115,20 @@ def csv_para_parquet(select: str, csv: Path, destino: Path) -> Path:
     return destino
 
 
-def transformar(ano: int) -> None:
+def transformar(ano: int) -> list[Path]:
     """Lê os CSVs brutos de um ano e grava os Parquets da silver."""
     pasta_csv = DATA_DIR / "bronze" / "csv" / f"ano={ano}"
     silver = DATA_DIR / "silver"
 
     if ano in ANOS_FORMATO_ANTIGO:
-        csv_para_parquet(SELECT_MICRODADOS, pasta_csv / f"MICRODADOS_ENEM_{ano}.csv",
-                         silver / "enem" / f"ano={ano}" / "dados.parquet")
-    else:
+        return [csv_para_parquet(SELECT_MICRODADOS, pasta_csv / f"MICRODADOS_ENEM_{ano}.csv",
+                                 silver / "enem" / f"ano={ano}" / "dados.parquet")]
+    return [
         csv_para_parquet(SELECT_PARTICIPANTES, pasta_csv / f"PARTICIPANTES_{ano}.csv",
-                         silver / "participantes" / f"ano={ano}" / "dados.parquet")
+                         silver / "participantes" / f"ano={ano}" / "dados.parquet"),
         csv_para_parquet(SELECT_RESULTADOS, pasta_csv / f"RESULTADOS_{ano}.csv",
-                         silver / "resultados" / f"ano={ano}" / "dados.parquet")
+                         silver / "resultados" / f"ano={ano}" / "dados.parquet"),
+    ]
 
 
 if __name__ == "__main__":

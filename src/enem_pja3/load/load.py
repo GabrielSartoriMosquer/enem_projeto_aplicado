@@ -66,6 +66,7 @@ def gravar(destino, *selects):
             ORDER BY NU_ANO, SG_UF_PROVA
         ) TO '{destino}' (FORMAT parquet, COMPRESSION zstd)
     """)
+    return destino
 
 
 def carregar_notas():
@@ -76,7 +77,7 @@ def carregar_notas():
     separou perfil e nota em arquivos sem ligação.
     """
     escola = "TP_DEPENDENCIA_ADM_ESC, TP_LOCALIZACAO_ESC,"
-    gravar(
+    return gravar(
         GOLD / "enem_notas.parquet",
         ler_silver("enem", escola + PERFIL_ANTIGO + NOTAS),
         ler_silver("resultados", escola + NOTAS),
@@ -87,7 +88,7 @@ def carregar_perfil():
     """Junta o perfil e o questionário dos 8 anos em um Parquet só"""
     perfil = "TP_FAIXA_ETARIA, TP_SEXO, TP_COR_RACA, TP_ST_CONCLUSAO, IN_TREINEIRO,"
     questionario = "COLUMNS('^Q\\d{3}$')"
-    gravar(
+    return gravar(
         GOLD / "enem_perfil.parquet",
         ler_silver("enem", perfil + PERFIL_ANTIGO + questionario),
         ler_silver("participantes", perfil + PERFIL_NOVO + questionario),

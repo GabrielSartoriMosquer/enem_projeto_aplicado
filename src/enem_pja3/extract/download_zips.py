@@ -6,6 +6,7 @@ from tqdm import tqdm # Barra de progesso dos downloads
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry # Para re-tentar o GET caso sejam disparados códigos de erro específicos
 
+from enem_pja3 import lake
 from enem_pja3.config import ANOS, DATA_DIR, LINK_DOWNLOAD
 
 PASTA_DESTINO = DATA_DIR / 'bronze' / 'zips'
@@ -32,11 +33,13 @@ def criar_sessao() -> requests.Session:
 
 
 def baixar_zip(ano: int, sessao: requests.Session) -> Path:
-    """Baixa o zip dos microdados de um ano para bronze/zips/"""
+    """Baixa o zip dos microdados de um ano para bronze/zips/ (do data lake, se já estiver lá)"""
     PASTA_DESTINO.mkdir(parents=True, exist_ok=True)
     caminho = PASTA_DESTINO / f"microdados_enem_{ano}.zip"
     if caminho.exists():
         print(f"[pulado] {caminho} já existe")
+        return caminho
+    if lake.baixar(caminho):
         return caminho
 
     # Baixa com outro nome e só renomeia no final, assim um download pela metade não vira um .zip

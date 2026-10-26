@@ -12,3 +12,9 @@ DATA_DIR = Path(os.environ.get("DATA_DIR", "data"))
 
 # Limite de memória do DuckDB. Sem ele o load usou mais de 20 GB e o processo foi morto
 MEMORIA_DUCKDB = "4GB"
+
+# Data lake no Azure (ADLS Gen2). Sem nenhuma das duas variáveis o pipeline usa só a pasta local.
+# Com AZURE_STORAGE_ACCOUNT o login é o do `az login` (ou a identidade gerenciada, rodando no Azure).
+# A connection string serve para o container local, que não tem o az CLI.
+LAKE_CONTA = os.environ.get("AZURE_STORAGE_ACCOUNT") or None
+LAKE_CONEXAO = os.environ.get("AZURE_STORAGE_CONNECTION_STRING") or None

@@ -18,7 +18,7 @@ Tamanhos em MB.
 
 | Arquivo | Linhas | Tamanho (MB) |
 |---|---:|---:|
-| enem_notas.parquet | 36335621 | 279.6 |
-| enem_perfil.parquet | 36335621 | 276.9 |
+| enem_notas.parquet | 36335621 | 279.8 |
+| enem_perfil.parquet | 36335621 | 276.6 |
 
-Gold total: 556.6 MB, contra 16155.5 MB de CSV (redução de 96.6%).
+Gold total: 556.4 MB, contra 16155.5 MB de CSV (redução de 96.6%).

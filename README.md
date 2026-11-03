@@ -44,7 +44,8 @@ flowchart LR
 - **Gold** (`data/gold/`): os 8 anos juntos em dois arquivos, ordenados por ano e UF.
   - `enem_notas.parquet`: notas, presença, UF e escola. De 2018 a 2023 também traz
     `TIPO_ESCOLA`, `ESCOLARIDADE_PAI`, `ESCOLARIDADE_MAE` e `RENDA_FAMILIAR` na mesma linha
-    (em 2024 e 2025 ficam vazias, ver abaixo).
+    (em 2024 e 2025 ficam vazias, ver abaixo). `IN_NOTA_ZERO` marca quem tirou 0 em alguma prova
+    objetiva: vem assim do INEP, mas puxa a média para baixo (use `WHERE NOT IN_NOTA_ZERO`).
   - `enem_perfil.parquet`: perfil e questionário completo, com as mesmas colunas harmonizadas.
 
 Os tamanhos de cada camada estão em [docs/volumetria.md](docs/volumetria.md) e a comparação
@@ -128,6 +129,10 @@ uv run pytest --cov=enem_pja3.transform --cov=enem_pja3.load --cov=enem_pja3.ext
 
 Os testes usam CSVs pequenos criados na hora (em latin-1, como os do INEP) e conferem os tipos,
 os valores nulos, o contrato de colunas e a harmonização do questionário.
+
+Se a gold já foi gerada, `tests/test_qualidade_gold.py` também confere os dados de verdade:
+presença e nota coerentes, notas na escala, redação de 20 em 20, as 27 UFs em todos os anos e o
+mesmo número de linhas em `enem_notas` e `enem_perfil`.
 
 ## Arquivos
 

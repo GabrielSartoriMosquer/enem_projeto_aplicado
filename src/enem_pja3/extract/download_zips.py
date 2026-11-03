@@ -1,10 +1,12 @@
 from pathlib import Path
 
 import certifi
-import requests # Para baixar os arquivos .zip dos microdados
-from tqdm import tqdm # Barra de progesso dos downloads
+import requests  # Para baixar os arquivos .zip dos microdados
 from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry # Para re-tentar o GET caso sejam disparados códigos de erro específicos
+from tqdm import tqdm  # Barra de progesso dos downloads
+from urllib3.util.retry import (
+    Retry,  # Para re-tentar o GET caso sejam disparados códigos de erro específicos
+)
 
 from enem_pja3 import lake
 from enem_pja3.config import ANOS, DATA_DIR, LINK_DOWNLOAD

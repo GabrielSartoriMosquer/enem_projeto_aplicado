@@ -72,3 +72,25 @@ def test_notas_juntam_os_anos_e_ficam_ordenadas(dados):
     # Em 2024 nota e perfil estão em arquivos sem ligação, então o perfil fica vazio na tabela de notas
     linha_2024 = consultar(notas, "SELECT TIPO_ESCOLA, RENDA_FAMILIAR, NU_NOTA_MT FROM ARQUIVO WHERE NU_ANO = 2024")
     assert linha_2024 == [(None, None, 530)]
+
+
+def test_marca_nota_zero(dados):
+    nota_zero = linha_antiga(2018, "SC", 2, "A")
+    nota_zero[19] = "0.0"  # NU_NOTA_MT
+    faltou = linha_antiga(2018, "SP", 2, "A")
+    faltou[12:20] = ["0", "0", "0", "0", "", "", "", ""]  # presenças e notas
+    escrever_csv(dados / "bronze/csv/ano=2018/MICRODADOS_ENEM_2018.csv", COLUNAS_ANTIGO, [
+        nota_zero,
+        faltou,
+        linha_antiga(2018, "RJ", 2, "A"),
+    ])
+    transformar(2018)
+    carregar_notas()
+    notas = dados / "gold/enem_notas.parquet"
+
+    resultado = consultar(notas, "SELECT SG_UF_PROVA, IN_NOTA_ZERO FROM ARQUIVO ORDER BY 1")
+    assert resultado == [
+        ("RJ", False),
+        ("SC", True),
+        ("SP", False),  # faltou: nota nula não é nota zero
+    ]

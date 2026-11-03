@@ -11,3 +11,10 @@ wheels/
 
 # Zip extracted
 *.zip
+
+data/
+# Testes
+.coverage
+
+# Connection string do data lake
+.env

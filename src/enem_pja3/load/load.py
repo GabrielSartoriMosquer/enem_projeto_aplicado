@@ -41,7 +41,10 @@ PERFIL_NOVO = """
 NOTAS = """
     TP_PRESENCA_CN, TP_PRESENCA_CH, TP_PRESENCA_LC, TP_PRESENCA_MT,
     NU_NOTA_CN, NU_NOTA_CH, NU_NOTA_LC, NU_NOTA_MT, TP_LINGUA,
-    NU_NOTA_REDACAO, TP_STATUS_REDACAO
+    NU_NOTA_REDACAO, TP_STATUS_REDACAO,
+    -- Nota 0 em alguma prova objetiva. Vem assim do INEP (5 a 10 mil casos por ano, 22 mil em 2023,
+    -- a maioria em CH) e puxa a média e o Z-Score para baixo. Nas análises: WHERE NOT IN_NOTA_ZERO
+    COALESCE(0 IN (NU_NOTA_CN, NU_NOTA_CH, NU_NOTA_LC, NU_NOTA_MT), false) AS IN_NOTA_ZERO
 """
 
 

@@ -1,0 +1,59 @@
+[project]
+name = "panorama-enem"
+version = "1.0.0"
+description = "Panorama ENEM - plataforma analítica para microdados do ENEM (2018-2025)"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "Gabriel Sartori Mosquer" },
+  { name = "Guilherme Santos Oliveira" },
+  { name = "Pedro Henrique Nunes Zanette" },
+  { name = "Vítor Kurth Vasconcellos Ferreira" }
+]
+dependencies = [
+  "fastapi>=0.115,<1.0",
+  "uvicorn[standard]>=0.30,<1.0",
+  "pydantic>=2.8,<3.0",
+  "pydantic-settings>=2.4,<3.0",
+  "pandas>=2.2,<3.0",
+  "numpy>=2.0,<3.0",
+  "duckdb>=1.1,<2.0",
+  "pyarrow>=17,<22",
+  "requests>=2.32,<3.0",
+  "python-multipart>=0.0.9,<1.0"
+]
+
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["backend"]
+include = ["app*"]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<10",
+  "pytest-cov>=5,<8",
+  "httpx>=0.27,<1.0",
+  "ruff>=0.6,<1.0"
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["backend"]
+testpaths = ["backend/tests"]
+addopts = "-q --disable-warnings --maxfail=1"
+
+[tool.coverage.run]
+source = ["backend/app"]
+omit = ["backend/app/etl/*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]

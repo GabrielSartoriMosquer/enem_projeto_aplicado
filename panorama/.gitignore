@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+*.egg-info/
+.ruff_cache/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Environment
+.env
+.env.*
+!.env.example
+*.local
+
+# Data (keep the small demo dataset only)
+data/raw/
+data/parquet/
+backend/data/raw/
+backend/data/parquet/
+backend/data/gold/
+!backend/data/demo/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl

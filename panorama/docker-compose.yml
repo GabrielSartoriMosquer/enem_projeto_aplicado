@@ -1,0 +1,33 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      PANORAMA_ENV: production
+      PANORAMA_DATA_MODE: auto
+      PANORAMA_GOLD_PATH: /app/backend/data/gold/enem_notas.parquet
+      PANORAMA_PARQUET_GLOB: /app/backend/data/parquet/ano=*/enem.parquet
+      PANORAMA_DEMO_CSV: /app/backend/data/demo/enem_demo.csv
+      PANORAMA_CORS_ORIGINS: http://localhost:8080
+    volumes:
+      # Gold do ETL (data/gold na raiz do repositório). Outro caminho: ENEM_GOLD_DIR=/caminho
+      - ${ENEM_GOLD_DIR:-../data/gold}:/app/backend/data/gold:ro
+      - ./backend/data/parquet:/app/backend/data/parquet:ro
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "8080:80"

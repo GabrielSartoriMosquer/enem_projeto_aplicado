@@ -13,6 +13,8 @@ wheels/
 *.zip
 
 data/
+# Base sintética de demonstração do panorama (o .gitignore de panorama/ ignora o resto)
+!panorama/backend/data/
 # Testes
 .coverage
 

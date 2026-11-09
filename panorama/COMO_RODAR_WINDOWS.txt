@@ -1,0 +1,32 @@
+PANORAMA ENEM - GUIA RÁPIDO (WINDOWS)
+
+OPÇÃO A - MAIS FÁCIL, COM DOCKER
+1. Instale Docker Desktop.
+2. Abra o PowerShell na pasta panorama do repositório.
+3. Execute:
+   docker compose up --build
+4. Abra no navegador:
+   http://localhost:8080
+5. Documentação da API:
+   http://localhost:8000/docs
+
+OPÇÃO B - DESENVOLVIMENTO
+Pré-requisitos: Python 3.12 e Node.js 20+.
+1. Abra o PowerShell na pasta panorama do repositório.
+2. Execute:
+   .\scripts\start-dev.ps1
+3. Abra:
+   http://localhost:5173
+
+MICRODADOS REAIS DO INEP
+Depois de instalar o ambiente Python:
+   python -m app.etl.cli all --years 2025
+ou:
+   python -m app.etl.cli all --years 2018-2025
+
+DADOS OFICIAIS (GOLD DO ETL)
+Se a gold do ETL já foi gerada na raiz do repositório (data\gold\enem_notas.parquet),
+a API usa esses dados automaticamente. Para gerar, na raiz do repositório: uv run enem-pja3
+
+Sem a gold e sem os Parquets oficiais, o projeto abre automaticamente em modo demonstração.
+O dataset de demonstração é sintético e não deve ser usado em conclusões acadêmicas.

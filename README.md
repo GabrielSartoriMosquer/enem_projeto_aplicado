@@ -71,6 +71,22 @@ uv run python -m enem_pja3.benchmark
 
 Se o pipeline parar no meio, é só rodar de novo: zips e CSVs que já existem são pulados.
 
+## Aplicação (API e frontend)
+
+A pasta [`panorama/`](panorama/) tem a API (FastAPI) e o frontend (React/Vite) que usam a gold:
+percentil e Z-Score por área, recorte socioeconômico, comparação por UF e tipo de escola, e
+posição na redação. A API lê `data/gold/enem_notas.parquet` direto, sem configuração; sem a gold,
+abre em modo demonstração com dados sintéticos.
+
+```bash
+cd panorama
+make install   # dependências da API e do frontend
+make api       # API em http://localhost:8000 (docs em /docs)
+make web       # frontend em http://localhost:5173
+```
+
+Detalhes (Docker, como as colunas da gold são lidas, testes) em [panorama/README.md](panorama/README.md).
+
 ## Data lake no Azure
 
 As camadas também podem ficar num data lake (ADLS Gen2), com um container para cada uma:

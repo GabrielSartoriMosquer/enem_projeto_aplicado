@@ -7,6 +7,9 @@ os.environ["PANORAMA_DEMO_CSV"] = str(
 )
 # Isola os testes de um .env local que aponte para a gold ou para Parquets reais.
 os.environ["PANORAMA_GOLD_PATH"] = str(Path(__file__).resolve().parent / "_sem_gold.parquet")
+# Nunca acessa o data lake nos testes, mesmo com AZURE_* num .env local.
+os.environ["AZURE_STORAGE_ACCOUNT"] = ""
+os.environ["AZURE_STORAGE_CONNECTION_STRING"] = ""
 os.environ["PANORAMA_PARQUET_GLOB"] = str(
     Path(__file__).resolve().parent / "_sem_parquet" / "ano=*" / "enem.parquet"
 )

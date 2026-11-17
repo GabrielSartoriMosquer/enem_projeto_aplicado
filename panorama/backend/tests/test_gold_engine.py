@@ -105,7 +105,7 @@ def test_socioeconomic_uses_harmonized_columns(engine):
     assert set(renda) == {"A", "B", "C", "Q"}
     assert renda["A"]["n"] == 1  # a linha de nota zero (também renda A) ficou fora
     assert renda["Q"]["mean"] == 800.0
-    assert renda["Q"]["category"].startswith("Q")
+    assert renda["Q"]["category"] == "Mais de 20 salários mínimos"
 
     mae = {
         group["code"]: group["mean"]

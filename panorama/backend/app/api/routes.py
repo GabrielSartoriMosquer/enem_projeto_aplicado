@@ -28,6 +28,8 @@ def health(engine: DataEngine = Depends(engine_dep)):
         return {
             "status": "ok",
             "data_source": engine.source_name,
+            # azure = gold baixada do data lake; local = arquivo no disco; demo = dados sintéticos
+            "data_origin": getattr(engine, "data_origin", "local"),
             "dataset_version": getattr(engine, "dataset_version", "unknown"),
             "years": engine.years(),
             "available": payload.get("available", True),
@@ -39,7 +41,11 @@ def health(engine: DataEngine = Depends(engine_dep)):
 
 @router.get("/meta/years")
 def years(engine: DataEngine = Depends(engine_dep)):
-    return {"years": engine.years(), "data_source": engine.source_name}
+    return {
+        "years": engine.years(),
+        "data_source": engine.source_name,
+        "data_origin": getattr(engine, "data_origin", "local"),
+    }
 
 
 @router.get("/meta/options")
@@ -61,6 +67,7 @@ def summary(year: int = Query(..., ge=2018, le=2025), engine: DataEngine = Depen
 @router.post("/analysis/percentile", response_model=AnalysisResponse)
 def percentile(payload: ScoreInput, engine: DataEngine = Depends(engine_dep)):
     try:
+        engine.validate_scores(payload.year, payload.scores)
         results = engine.percentiles(payload.year, payload.scores)
         return {
             "year": payload.year,

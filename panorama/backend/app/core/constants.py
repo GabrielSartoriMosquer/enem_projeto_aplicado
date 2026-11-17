@@ -33,24 +33,26 @@ Q001_Q002_LABELS = {
 
 # Faixas do questionário socioeconômico. Os rótulos são intencionalmente descritivos
 # e a aplicação também exibe o código original do INEP para transparência.
+# Renda mensal da família (questão Q006). O INEP define as faixas em salários mínimos do ano
+# da prova, então o texto em salários mínimos vale para todas as edições.
 Q006_LABELS = {
-    "A": "A — Nenhuma renda",
-    "B": "B — Faixa de renda B",
-    "C": "C — Faixa de renda C",
-    "D": "D — Faixa de renda D",
-    "E": "E — Faixa de renda E",
-    "F": "F — Faixa de renda F",
-    "G": "G — Faixa de renda G",
-    "H": "H — Faixa de renda H",
-    "I": "I — Faixa de renda I",
-    "J": "J — Faixa de renda J",
-    "K": "K — Faixa de renda K",
-    "L": "L — Faixa de renda L",
-    "M": "M — Faixa de renda M",
-    "N": "N — Faixa de renda N",
-    "O": "O — Faixa de renda O",
-    "P": "P — Faixa de renda P",
-    "Q": "Q — Faixa de renda Q",
+    "A": "Nenhuma renda",
+    "B": "Até 1 salário mínimo",
+    "C": "De 1 a 1,5 salário mínimo",
+    "D": "De 1,5 a 2 salários mínimos",
+    "E": "De 2 a 2,5 salários mínimos",
+    "F": "De 2,5 a 3 salários mínimos",
+    "G": "De 3 a 4 salários mínimos",
+    "H": "De 4 a 5 salários mínimos",
+    "I": "De 5 a 6 salários mínimos",
+    "J": "De 6 a 7 salários mínimos",
+    "K": "De 7 a 8 salários mínimos",
+    "L": "De 8 a 9 salários mínimos",
+    "M": "De 9 a 10 salários mínimos",
+    "N": "De 10 a 12 salários mínimos",
+    "O": "De 12 a 15 salários mínimos",
+    "P": "De 15 a 20 salários mínimos",
+    "Q": "Mais de 20 salários mínimos",
 }
 
 UF_NAMES = {

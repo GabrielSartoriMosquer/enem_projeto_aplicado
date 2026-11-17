@@ -18,6 +18,16 @@ class Settings(BaseSettings):
     # Camada gold gerada pelo ETL deste repositório (data/gold/ na raiz, ao lado de panorama/)
     gold_path: str = str(PROJECT_ROOT.parent / "data/gold/enem_notas.parquet")
     demo_csv: str = str(PROJECT_ROOT / "backend/data/demo/enem_demo.csv")
+    # Data lake no Azure (mesmas variáveis do ETL). Com uma delas definida, a API usa a gold do
+    # lake: com a conta, o login é o do `az login`; a connection string serve para o Docker.
+    lake_account: str | None = Field(default=None, validation_alias="AZURE_STORAGE_ACCOUNT")
+    lake_connection_string: str | None = Field(
+        default=None, validation_alias="AZURE_STORAGE_CONNECTION_STRING"
+    )
+    lake_gold_container: str = "gold"
+    lake_gold_file: str = "enem_notas.parquet"
+    # Onde a cópia baixada do lake fica guardada (fora do git, ver .gitignore).
+    lake_cache_path: str = str(PROJECT_ROOT / "backend/data/lake/gold/enem_notas.parquet")
     cors_origins: str = "http://localhost:5173,http://localhost:8080"
     api_prefix: str = "/api/v1"
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import glob
 import logging
+import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
 from threading import Lock
@@ -300,6 +301,10 @@ class DuckDBEngine(DataEngine):
     def _connect(self):
         con = self.duckdb.connect(database=":memory:")
         con.execute("PRAGMA threads=4")
+        # O padrão é ./.tmp, que não dá para gravar no Vercel; o DuckDB usa a pasta se a consulta
+        # não couber na memória.
+        temp_dir = (Path(tempfile.gettempdir()) / "duckdb").as_posix().replace("'", "''")
+        con.execute(f"SET temp_directory='{temp_dir}'")
         return con
 
     def _base(self) -> str:

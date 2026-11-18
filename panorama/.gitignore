@@ -39,3 +39,4 @@ Thumbs.db
 *.tfstate
 *.tfstate.*
 .terraform.lock.hcl
+.vercel

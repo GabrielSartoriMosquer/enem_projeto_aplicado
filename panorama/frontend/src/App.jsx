@@ -1,32 +1,72 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Header from './components/layout/Header'
-import StatCard from './components/layout/StatCard'
-import Loading from './components/common/Loading'
 import ErrorState from './components/common/ErrorState'
-import PercentileModule from './components/modules/PercentileModule'
+import InfoTooltip from './components/common/InfoTooltip'
+import AnswerSheet from './components/common/AnswerSheet'
 import SocioeconomicModule from './components/modules/SocioeconomicModule'
 import RegionalModule from './components/modules/RegionalModule'
-import EssayModule from './components/modules/EssayModule'
+import Methodology from './components/modules/Methodology'
 import MyPanorama from './components/panorama/MyPanorama'
+import PopulationModule from './components/modules/PopulationModule'
 import { api } from './services/api'
+import { AREAS, DEFAULT_SCORES } from './constants/areas'
+import { formatNumber } from './utils/percentile'
 
-const navMap = [
-  { id: 'overview', label: 'Visão Geral' },
-  { id: 'panorama', label: 'Meu Panorama' },
-  { id: 'percentile', label: 'Minha Posição' },
-  { id: 'socio', label: 'Socioeconômico' },
-  { id: 'region', label: 'Estados e Escolas' },
-  { id: 'essay', label: 'Redação' },
-  { id: 'methodology', label: 'Metodologia' },
+export const SECTIONS = [
+  { id: 'overview', label: 'Início' },
+  { id: 'panorama', label: 'Minhas notas' },
+  { id: 'region', label: 'Estados' },
+  { id: 'socio', label: 'Renda e família' },
+  { id: 'populacao', label: 'Quem faz o ENEM', short: 'Inscritos' },
+  { id: 'methodology', label: 'Como funciona' },
 ]
 
+// Parâmetros do link compartilhável: ?ano=2023&cn=600&ch=...&red=800
+const URL_KEYS = { CN: 'cn', CH: 'ch', LC: 'lc', MT: 'mt', REDACAO: 'red' }
+const STORAGE_KEY = 'panorama-enem:notas'
+
+function readSaved() {
+  const params = new URLSearchParams(window.location.search)
+  const fromUrl = Object.fromEntries(AREAS.map(({ code }) => [code, params.get(URL_KEYS[code]) ?? '']))
+  if (Object.values(fromUrl).some((value) => value !== '')) {
+    return { year: Number(params.get('ano')) || null, scores: { ...DEFAULT_SCORES, ...fromUrl }, fromLink: true }
+  }
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || 'null')
+    if (saved?.scores) return { year: saved.year || null, scores: { ...DEFAULT_SCORES, ...saved.scores }, fromLink: false }
+  } catch (_) {
+    // Navegador sem armazenamento (modo privado, bloqueado): começa com o formulário vazio.
+  }
+  return { year: Number(params.get('ano')) || null, scores: DEFAULT_SCORES, fromLink: false }
+}
+
+export function buildShareUrl(year, scores) {
+  const params = new URLSearchParams({ ano: String(year) })
+  AREAS.forEach(({ code }) => { if (scores[code] !== '' && scores[code] !== undefined) params.set(URL_KEYS[code], String(scores[code])) })
+  return `${window.location.origin}${window.location.pathname}?${params}`
+}
+
+const filledScores = (scores) => Object.fromEntries(
+  Object.entries(scores).filter(([, value]) => value !== '' && value !== null).map(([key, value]) => [key, Number(value)]),
+)
+
 function App() {
+  const saved = useRef(readSaved()).current
   const [years, setYears] = useState([])
-  const [year, setYear] = useState(2024)
+  const [year, setYear] = useState(saved.year)
   const [summary, setSummary] = useState(null)
   const [source, setSource] = useState('')
   const [active, setActive] = useState('overview')
   const [error, setError] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
+  const [showTop, setShowTop] = useState(false)
+
+  // Notas digitadas, notas do resultado atual e o resultado (sempre da edição `year`).
+  const [scores, setScores] = useState(saved.scores)
+  const [submitted, setSubmitted] = useState(saved.fromLink ? saved.scores : null)
+  const [result, setResult] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [calcError, setCalcError] = useState('')
 
   useEffect(() => {
     let mounted = true
@@ -35,104 +75,151 @@ function App() {
         if (!mounted) return
         const availableYears = payload?.years || []
         setYears(availableYears)
-        if (availableYears.length) {
-          const latest = Math.max(...availableYears)
-          setYear(latest)
-        }
+        setYear((current) => (availableYears.includes(current) ? current : Math.max(...availableYears)))
         setSource(payload?.data_source || 'demo')
       })
-      .catch((err) => {
-        if (!mounted) return
-        setError(err.message || 'Não foi possível carregar os dados.')
-      })
-
+      .catch((err) => { if (mounted) setError(err.message || 'Não foi possível carregar os dados.') })
     return () => { mounted = false }
-  }, [])
+  }, [reloadKey])
 
   useEffect(() => {
-    if (!year) return
+    if (!year) return undefined
+    let current = true
     setSummary(null)
     api.summary(year)
-      .then((payload) => setSummary(payload))
-      .catch((err) => setError(err.message || 'Não foi possível carregar o resumo da edição.'))
-  }, [year])
+      .then((payload) => { if (current) setSummary(payload) })
+      .catch((err) => { if (current) setError(err.message || 'Não foi possível carregar o resumo da edição.') })
+    return () => { current = false }
+  }, [year, reloadKey])
 
-  const topStats = useMemo(() => {
-    if (!summary) return []
-    return [
-      { icon: '◎', label: 'Edição', value: String(summary.year), hint: 'análise dentro da mesma edição', accent: 'primary' },
-      { icon: '◌', label: 'Participantes', value: Number(summary.participants || 0).toLocaleString('pt-BR'), hint: 'registro válido', accent: 'cyan' },
-      { icon: '∑', label: 'Média geral', value: `${Number(summary.means?.MT || 0).toFixed(1)}`, hint: 'matemática', accent: 'violet' },
-      { icon: '▣', label: 'Fonte', value: source || 'demo', hint: 'dados ativos', accent: 'success' },
-    ]
-  }, [summary, source])
+  // Calcula (ou recalcula, ao trocar de edição) o resultado das notas enviadas. Assim nunca
+  // fica na tela um resultado de outra edição.
+  useEffect(() => {
+    if (!year || !years.length || !submitted) return undefined
+    const payload = filledScores(submitted)
+    if (!Object.keys(payload).length) return undefined
+    let current = true
+    setBusy(true)
+    setCalcError('')
+    api.percentile(year, payload)
+      .then((response) => { if (current) setResult({ ...response, year }) })
+      .catch((err) => {
+        if (!current) return
+        setResult(null)
+        setCalcError(err.message)
+      })
+      .finally(() => { if (current) setBusy(false) })
+    return () => { current = false }
+  }, [year, years.length, submitted])
+
+  // Mantém o link e o navegador lembrando a edição e as notas do último resultado.
+  useEffect(() => {
+    if (!year) return
+    const url = submitted ? buildShareUrl(year, submitted) : `${window.location.pathname}?ano=${year}`
+    window.history.replaceState(null, '', url)
+    if (submitted) {
+      try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ year, scores: submitted })) } catch (_) { /* sem armazenamento */ }
+    }
+  }, [year, submitted])
+
+  const submitScores = useCallback(() => {
+    setSubmitted({ ...scores })
+    requestAnimationFrame(() => document.getElementById('panorama-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }, [scores])
+
+  // Destaca no menu a seção que está no meio da tela.
+  useEffect(() => {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => { if (entry.isIntersecting) setActive(entry.target.id) })
+    }, { rootMargin: '-45% 0px -50% 0px' })
+    SECTIONS.forEach(({ id }) => {
+      const element = document.getElementById(id)
+      if (element) observer.observe(element)
+    })
+    const onScroll = () => setShowTop(window.scrollY > 900)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('scroll', onScroll)
+    }
+  }, [])
+
+  const retry = () => {
+    setError('')
+    setReloadKey((key) => key + 1)
+  }
+
+  const focusYearPicker = () => {
+    const picker = document.querySelector('.header-year select')
+    picker?.focus()
+  }
 
   const jumpTo = (sectionId) => {
-    setActive(sectionId)
-    const target = document.getElementById(sectionId)
-    if (target) {
-      target.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
+    document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
+
+  const startWithScores = () => {
+    jumpTo('panorama')
+    window.setTimeout(() => document.querySelector('.panorama-score-grid input')?.focus({ preventScroll: true }), 500)
+  }
+
+  // Média geral: média das cinco áreas (quatro provas objetivas e redação) da edição.
+  const overallMean = useMemo(() => {
+    const values = Object.values(summary?.means || {}).map(Number).filter((value) => !Number.isNaN(value))
+    return values.length ? values.reduce((total, value) => total + value, 0) / values.length : null
+  }, [summary])
+
+  const sourceLabel = source === 'official' ? 'Dados oficiais do INEP' : source === 'demo' ? 'Dados de demonstração' : error ? 'Dados indisponíveis' : 'Carregando dados…'
+  const skeleton = (width) => <span className="kpi-skeleton shimmer" style={width ? { width } : undefined} aria-label="Carregando" />
 
   return (
     <div className="app-shell">
-      <Header source={source || 'demo'} activeSection={active} onNavigate={jumpTo} year={year} years={years} onYearChange={setYear} />
+      <Header sections={SECTIONS} activeSection={active} onNavigate={jumpTo} year={year} years={years} onYearChange={setYear} />
 
-      <main className="page-shell">
+      <main className="page-shell" id="conteudo" tabIndex={-1}>
         <section id="overview" className="hero-section">
+          <AnswerSheet />
           <div className="hero-copy">
-            <span className="section-tag">PANORAMA ENEM</span>
-            <h1>Descubra onde seu desempenho se posiciona no ENEM.</h1>
+            <h1>Descubra onde sua nota te coloca no ENEM.</h1>
             <p>
-              Explore os microdados do INEP e compare seu resultado com milhares de participantes da mesma edição.
+              Digite suas notas e compare com todos os participantes da mesma edição, usando os microdados oficiais do INEP.
             </p>
 
             <div className="hero-actions">
-              <button type="button" className="button button-primary" onClick={() => jumpTo('percentile')}>
-                Analisar meu desempenho
+              <button type="button" className="button button-primary" onClick={startWithScores}>
+                Comparar minhas notas
               </button>
               <button type="button" className="button button-secondary" onClick={() => jumpTo('methodology')}>
-                Conhecer metodologia
+                Como funciona
               </button>
             </div>
 
-            <div className="hero-meta">
-              <div className="meta-pill">
-                <span className="dot dot-primary" />
-                Fonte ativa: {source || 'demo'}
-              </div>
-              <div className="meta-pill">
-                <span className="dot dot-cyan" />
-                {summary ? `${summary.participants.toLocaleString('pt-BR')} participantes` : 'Carregando dados'}
-              </div>
-            </div>
+            <p className="hero-source"><span className={source === 'demo' ? 'dot dot-warning' : 'dot dot-primary'} />{sourceLabel}</p>
           </div>
 
           <div className="hero-panel">
-            <div className="panel-header">
-              <span className="panel-label">Edição</span>
-              <label className="year-picker">
-                <select value={year} onChange={(event) => setYear(Number(event.target.value))} aria-label="Selecionar edição do ENEM">
-                  {years.map((item) => (
-                    <option key={item} value={item}>{item}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
+            <h2 className="hero-panel-title">ENEM {year || '…'} em números</h2>
             <div className="metric-stack">
               <div className="small-kpi">
-                <span className="mini-label">Participantes</span>
-                <strong>{summary ? summary.participants.toLocaleString('pt-BR') : '—'}</strong>
+                <span className="mini-label">
+                  Participantes
+                  <InfoTooltip label="Participantes" align="right" text="Pessoas desta edição usadas nos cálculos. Ficam de fora os registros com nota zero em alguma prova objetiva, como recomenda o INEP, porque distorcem médias e comparações." />
+                </span>
+                <strong>{summary ? summary.participants.toLocaleString('pt-BR') : skeleton(150)}</strong>
               </div>
               <div className="small-kpi accent">
-                <span className="mini-label">Média Matemática</span>
-                <strong>{summary ? Number(summary.means?.MT || 0).toFixed(1) : '—'}</strong>
+                <span className="mini-label">
+                  Média geral
+                  <InfoTooltip label="Média geral" align="right" text="Média das cinco áreas nesta edição: Ciências da Natureza, Ciências Humanas, Linguagens, Matemática e Redação." />
+                </span>
+                <strong>{summary ? formatNumber(overallMean, 1) : skeleton()}</strong>
               </div>
               <div className="small-kpi">
-                <span className="mini-label">Média Redação</span>
-                <strong>{summary ? Number(summary.means?.REDACAO || 0).toFixed(1) : '—'}</strong>
+                <span className="mini-label">
+                  Redações nota 1000
+                  <InfoTooltip label="Redações nota 1000" align="right" text="Quantas redações receberam a nota máxima nesta edição, entre os participantes usados nos cálculos." />
+                </span>
+                <strong>{summary ? (summary.essay_perfect ?? '—').toLocaleString('pt-BR') : skeleton()}</strong>
               </div>
             </div>
           </div>
@@ -140,84 +227,42 @@ function App() {
 
         {error && (
           <section className="status-block">
-            <ErrorState message={error} onRetry={() => api.summary(year).then(setSummary).catch((err) => setError(err.message))} onChangeSource={() => setYear(year)} />
+            <ErrorState message={error} onRetry={retry} onChangeSource={years.length ? focusYearPicker : undefined} />
           </section>
         )}
 
-        <section className="stats-grid" aria-label="Resumo da edição">
-          {!summary ? <Loading label="Carregando revisão da edição…" /> : topStats.map((item) => (
-            <StatCard key={item.label} icon={item.icon} label={item.label} value={item.value} hint={item.hint} accent={item.accent} />
-          ))}
+        <MyPanorama
+          year={year}
+          source={source}
+          scores={scores}
+          onScoresChange={setScores}
+          onSubmit={submitScores}
+          result={result}
+          busy={busy}
+          error={calcError}
+        />
+
+        <section className="module-shell" id="region">
+          <RegionalModule year={year} years={years} onYearChange={setYear} userResult={result} />
         </section>
 
-        <MyPanorama years={years} year={year} source={source} onYearChange={setYear} />
-
-        <div className="module-shell" id="percentile">
-          <PercentileModule year={year} />
-        </div>
-
-        <div className="module-shell" id="socio">
-          <SocioeconomicModule year={year} />
-        </div>
-
-        <div className="module-shell" id="region">
-          <RegionalModule year={year} />
-        </div>
-
-        <div className="module-shell" id="essay">
-          <EssayModule year={year} />
-        </div>
-
-        <section id="methodology" className="methodology-panel">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">METODOLOGIA</span>
-              <h2>Como a análise é construída</h2>
-            </div>
-            <p>Os dados são tratados com transparência e as comparações são sempre internas à mesma edição.</p>
-          </div>
-
-          <div className="methodology-flow" aria-label="Fluxo metodológico">
-            {['Microdados INEP', 'ETL', 'Parquet', 'DuckDB', 'FastAPI', 'Panorama ENEM'].map((step, index) => (
-              <div key={step} className="flow-step">
-                <span>{index + 1}</span>
-                <strong>{step}</strong>
-              </div>
-            ))}
-          </div>
-
-          <div className="methodology-cards">
-            <article className="method-card">
-              <h3>Percentil</h3>
-              <p>Mostra a proporção de participantes com nota menor ou igual à informada.</p>
-            </article>
-            <article className="method-card">
-              <h3>Média</h3>
-              <p>Indicador central da distribuição da edição analisada.</p>
-            </article>
-            <article className="method-card">
-              <h3>Desvio padrão</h3>
-              <p>Expressa a dispersão dos resultados em torno da média.</p>
-            </article>
-            <article className="method-card">
-              <h3>Z-score</h3>
-              <p>Indica quantos desvios-padrão a nota está acima ou abaixo da média.</p>
-            </article>
-          </div>
-
-          <div className="disclaimer-box">
-            <strong>Aviso metodológico</strong>
-            <p>As análises apresentadas são descritivas e não estabelecem relações causais. A comparação se dá dentro da mesma edição.</p>
-          </div>
+        <section className="module-shell" id="socio">
+          <SocioeconomicModule year={year} means={summary?.means} years={years} onYearChange={setYear} />
         </section>
+
+        <section className="module-shell" id="populacao">
+          <PopulationModule year={year} years={years} onYearChange={setYear} />
+        </section>
+
+        <Methodology />
       </main>
 
       <footer className="site-footer">
-        <span>Panorama ENEM • dados abertos do INEP</span>
-        <span>Gabriel • Guilherme • Pedro • Vítor</span>
+        <span>Panorama ENEM, feito com os dados abertos do INEP</span>
+        <span>Gabriel, Guilherme, Pedro e Vítor</span>
       </footer>
 
-      <button type="button" className="back-to-top" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="Voltar ao topo">
+      <button type="button" className={showTop ? 'back-to-top visible' : 'back-to-top'} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} aria-label="Voltar ao topo" tabIndex={showTop ? 0 : -1}>
         ↑
       </button>
     </div>

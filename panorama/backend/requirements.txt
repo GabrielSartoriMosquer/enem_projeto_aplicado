@@ -1,0 +1,13 @@
+# Dependências da API no Vercel (o serviço "backend" tem esta pasta como raiz).
+# É a lista `dependencies` do panorama/pyproject.toml sem o que só o ETL interno (app/etl) usa:
+# pyarrow e requests. O pacote precisa ficar abaixo de 250 MB; acima disso o Vercel instala as
+# dependências no /tmp ao iniciar e falta espaço para a gold baixada do lake.
+fastapi>=0.115,<1.0
+uvicorn>=0.30,<1.0
+pydantic>=2.8,<3.0
+pydantic-settings>=2.4,<3.0
+pandas>=2.2,<3.0
+numpy>=2.0,<3.0
+duckdb>=1.1,<2.0
+azure-identity>=1.17,<2.0
+azure-storage-file-datalake>=12.16,<13.0

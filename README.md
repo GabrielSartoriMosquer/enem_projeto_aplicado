@@ -30,23 +30,28 @@ flowchart LR
     subgraph Gold
         NOTAS[enem_notas.parquet]
         PERFIL[enem_perfil.parquet]
+        RESUMO[enem_perfil_resumo.parquet]
     end
 
     ENEM -->|load| NOTAS
     RES --> NOTAS
     ENEM --> PERFIL
     PART --> PERFIL
+    PERFIL --> RESUMO
 ```
 
 - **Bronze** (`data/bronze/`): o zip como veio do INEP e os CSVs da pasta `DADOS/` do zip.
 - **Silver** (`data/silver/`): um Parquet por ano, só com as colunas que vamos usar, com tipos
   menores (ex.: `UTINYINT` para códigos, `DECIMAL(5,1)` para notas) e compressão ZSTD.
-- **Gold** (`data/gold/`): os 8 anos juntos em dois arquivos, ordenados por ano e UF.
+- **Gold** (`data/gold/`): os 8 anos juntos, ordenados por ano e UF.
   - `enem_notas.parquet`: notas, presença, UF e escola. De 2018 a 2023 também traz
     `TIPO_ESCOLA`, `ESCOLARIDADE_PAI`, `ESCOLARIDADE_MAE` e `RENDA_FAMILIAR` na mesma linha
     (em 2024 e 2025 ficam vazias, ver abaixo). `IN_NOTA_ZERO` marca quem tirou 0 em alguma prova
     objetiva: vem assim do INEP, mas puxa a média para baixo (use `WHERE NOT IN_NOTA_ZERO`).
   - `enem_perfil.parquet`: perfil e questionário completo, com as mesmas colunas harmonizadas.
+  - `enem_perfil_resumo.parquet`: contagens do perfil por ano, UF, pergunta e resposta (cerca de
+    100 KB), com as perguntas que mudaram de número em 2024 já harmonizadas e cruzamentos por
+    renda, cor/raça, sexo e escola. É o que a área "Quem faz o ENEM" do app usa.
 
 Os tamanhos de cada camada estão em [docs/volumetria.md](docs/volumetria.md) e a comparação
 entre formatos em [docs/benchmark.md](docs/benchmark.md).

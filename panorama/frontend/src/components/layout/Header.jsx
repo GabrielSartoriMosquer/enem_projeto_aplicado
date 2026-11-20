@@ -1,62 +1,58 @@
-import React from 'react'
-import { Menu, X, Database, ChevronDown } from 'lucide-react'
+import { ChevronDown, Home, PenLine, Map, Users, BookOpen, ChartPie } from 'lucide-react'
 
-const navItems = [
-  { id: 'overview', label: 'Visão Geral' },
-  { id: 'panorama', label: 'Meu Panorama' },
-  { id: 'percentile', label: 'Minha Posição' },
-  { id: 'socio', label: 'Socioeconômico' },
-  { id: 'region', label: 'Estados e Escolas' },
-  { id: 'essay', label: 'Redação' },
-  { id: 'methodology', label: 'Metodologia' },
-]
+const ICONS = { overview: Home, panorama: PenLine, region: Map, socio: Users, populacao: ChartPie, methodology: BookOpen }
 
-export default function Header({ source, activeSection, onNavigate, year, years, onYearChange }) {
-  const [menuOpen, setMenuOpen] = React.useState(false)
-
-  const navigate = (id) => {
-    onNavigate(id)
-    setMenuOpen(false)
-  }
+// Cabeçalho com o único seletor de edição do site. No celular, os links vão para uma barra
+// fixa embaixo da tela, ao alcance do polegar.
+export default function Header({ sections, activeSection, onNavigate, year, years, onYearChange }) {
+  const links = (className) => sections.map((item) => {
+    const Icon = ICONS[item.id]
+    const isActive = activeSection === item.id
+    return (
+      <a
+        key={item.id}
+        href={`#${item.id}`}
+        className={isActive ? `${className} active` : className}
+        aria-current={isActive ? 'true' : undefined}
+        onClick={(event) => {
+          event.preventDefault()
+          onNavigate(item.id)
+        }}
+      >
+        {className === 'tab-link' && <Icon size={20} aria-hidden="true" />}
+        {className === 'tab-link' ? <span>{item.short || item.label}</span> : (
+          <>
+            <span className={item.short ? 'nav-full has-short' : 'nav-full'}>{item.label}</span>
+            {item.short && <span className="nav-short">{item.short}</span>}
+          </>
+        )}
+      </a>
+    )
+  })
 
   return (
-    <header className="topbar">
-      <div className="topbar-inner">
-        <button className="brand-block" type="button" onClick={() => navigate('overview')} aria-label="Ir para visão geral">
-          <span className="brand-mark" aria-hidden="true">P</span>
-          <span className="brand-copy">
-            <span className="brand-eyebrow">Panorama</span>
-            <strong className="brand-name">ENEM</strong>
-          </span>
-        </button>
+    <>
+      <header className="topbar">
+        <div className="topbar-inner">
+          <a className="brand-block" href="#overview" onClick={(event) => { event.preventDefault(); onNavigate('overview') }} aria-label="Panorama ENEM, ir para o início">
+            <span className="brand-mark" aria-hidden="true">P</span>
+            <span className="brand-name">Panorama ENEM</span>
+          </a>
 
-        <nav className={menuOpen ? 'main-nav open' : 'main-nav'} aria-label="Navegação principal">
-          {navItems.map((item) => (
-            <button
-              type="button"
-              key={item.id}
-              className={activeSection === item.id ? 'nav-link active' : 'nav-link'}
-              onClick={() => navigate(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </nav>
+          <nav className="main-nav" aria-label="Seções">{links('nav-link')}</nav>
 
-        <div className="header-actions">
-          <div className="source-pill" aria-live="polite"><Database size={14} /> {source || 'carregando…'}</div>
           <label className="header-year">
             <span>Edição</span>
-            <select value={year} onChange={(event) => onYearChange(Number(event.target.value))} aria-label="Selecionar edição">
+            <select value={year || ''} onChange={(event) => onYearChange(Number(event.target.value))} aria-label="Edição do ENEM">
+              {!years.length && <option value={year || ''}>{year || '…'}</option>}
               {years.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
-            <ChevronDown size={14} aria-hidden="true" />
+            <ChevronDown size={16} aria-hidden="true" />
           </label>
-          <button className="menu-toggle" type="button" onClick={() => setMenuOpen((value) => !value)} aria-expanded={menuOpen} aria-label={menuOpen ? 'Fechar menu' : 'Abrir menu'}>
-            {menuOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
         </div>
-      </div>
-    </header>
+      </header>
+
+      <nav className="tab-bar" aria-label="Seções">{links('tab-link')}</nav>
+    </>
   )
 }

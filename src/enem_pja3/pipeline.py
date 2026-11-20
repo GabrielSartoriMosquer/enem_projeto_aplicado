@@ -7,6 +7,7 @@ from enem_pja3.extract.download_zips import criar_sessao, baixar_zip
 from enem_pja3.extract.extract_zips import extrair_csvs
 from enem_pja3.transform.transform import transformar
 from enem_pja3.load.load import carregar_notas, carregar_perfil
+from enem_pja3.load.resumo import carregar_resumo_perfil
 from enem_pja3.volumetria import gerar_volumetria
 
 
@@ -33,6 +34,9 @@ def main() -> None:
     lake.sincronizar(DATA_DIR / "silver")
     for parquet in (carregar_notas(), carregar_perfil()):
         lake.enviar(parquet)
+    # Contagens do perfil por ano, UF e resposta (área "Quem faz o ENEM" do app), feitas a partir
+    # da gold do perfil, então vêm depois dela
+    lake.enviar(carregar_resumo_perfil())
 
     print(gerar_volumetria())
     print(f"Tempo total: {time.time() - inicio:.0f} s")

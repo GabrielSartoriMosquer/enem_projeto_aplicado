@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router
 from app.core.config import get_settings
 from app.services.data_engine import get_engine
+from app.services.population import get_population
 
 settings = get_settings()
 
@@ -17,6 +18,7 @@ async def lifespan(_: FastAPI):
     # Escolhe a fonte ao subir: com o data lake configurado, a gold é baixada (se mudou) antes de
     # a API aceitar requisições, em vez de travar a primeira consulta.
     get_engine(settings)
+    get_population(settings)
     yield
 
 

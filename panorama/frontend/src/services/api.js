@@ -44,4 +44,12 @@ export const api = {
   essay: (year, score) => request('/analysis/essay', {
     method: 'POST', body: JSON.stringify({ year, score: Number(score) }),
   }),
+  // Área "Quem faz o ENEM" (perfil dos inscritos)
+  populationCatalog: () => request('/population/catalog'),
+  populationHighlights: (year) => request(`/population/highlights?year=${year}`),
+  populationIndicator: (year, id) => request(`/population/indicator?year=${year}&id=${encodeURIComponent(id)}`),
+  populationTrend: (id) => request(`/population/trend?id=${encodeURIComponent(id)}`),
+  populationCrosstab: (year, id, recorte) => request(
+    `/population/crosstab?year=${year}&id=${encodeURIComponent(id)}&recorte=${encodeURIComponent(recorte)}`,
+  ),
 }

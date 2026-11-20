@@ -24,7 +24,7 @@ def lake_enabled(settings: Settings) -> bool:
     return bool(settings.lake_account or settings.lake_connection_string)
 
 
-def _file_client(settings: Settings):
+def _file_client(settings: Settings, file_name: str):
     # Import tardio: quem não usa o lake não precisa do SDK do Azure.
     from azure.storage.filedatalake import DataLakeServiceClient
 
@@ -37,7 +37,7 @@ def _file_client(settings: Settings):
             f"https://{settings.lake_account}.dfs.core.windows.net",
             credential=DefaultAzureCredential(),
         )
-    return service.get_file_client(settings.lake_gold_container, settings.lake_gold_file)
+    return service.get_file_client(settings.lake_gold_container, file_name)
 
 
 def _md5(path: Path) -> bytes:
@@ -46,17 +46,21 @@ def _md5(path: Path) -> bytes:
 
 
 def sync_gold(settings: Settings) -> Path:
-    """Garante no cache local a mesma gold que está no lake e devolve o caminho dela."""
-    target = Path(settings.lake_cache_path)
-    remote = _file_client(settings)
+    """Garante no cache local a mesma gold de notas que está no lake e devolve o caminho dela."""
+    return sync_file(settings, settings.lake_gold_file, Path(settings.lake_cache_path))
+
+
+def sync_file(settings: Settings, file_name: str, target: Path) -> Path:
+    """Baixa `file_name` do container gold para `target`, se não estiver lá com o mesmo MD5."""
+    remote = _file_client(settings, file_name)
     remote_md5 = remote.get_file_properties().content_settings.content_md5
-    location = f"{settings.lake_gold_container}/{settings.lake_gold_file}"
+    location = f"{settings.lake_gold_container}/{file_name}"
 
     if target.is_file() and remote_md5 and bytes(remote_md5) == _md5(target):
-        logger.info("Gold do lake já está no cache: %s", target)
+        logger.info("Arquivo do lake já está no cache: %s", target)
         return target
 
-    logger.info("Baixando a gold do lake (%s) para %s", location, target)
+    logger.info("Baixando %s do lake para %s", location, target)
     target.parent.mkdir(parents=True, exist_ok=True)
     partial = target.with_name(target.name + ".part")
     with open(partial, "wb") as handle:

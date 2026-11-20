@@ -7,6 +7,7 @@ import SocioeconomicModule from './components/modules/SocioeconomicModule'
 import RegionalModule from './components/modules/RegionalModule'
 import Methodology from './components/modules/Methodology'
 import MyPanorama from './components/panorama/MyPanorama'
+import PopulationModule from './components/modules/PopulationModule'
 import { api } from './services/api'
 import { AREAS, DEFAULT_SCORES } from './constants/areas'
 import { formatNumber } from './utils/percentile'
@@ -16,6 +17,7 @@ export const SECTIONS = [
   { id: 'panorama', label: 'Minhas notas' },
   { id: 'region', label: 'Estados' },
   { id: 'socio', label: 'Renda e família' },
+  { id: 'populacao', label: 'Quem faz o ENEM', short: 'Inscritos' },
   { id: 'methodology', label: 'Como funciona' },
 ]
 
@@ -246,6 +248,10 @@ function App() {
 
         <section className="module-shell" id="socio">
           <SocioeconomicModule year={year} means={summary?.means} years={years} onYearChange={setYear} />
+        </section>
+
+        <section className="module-shell" id="populacao">
+          <PopulationModule year={year} years={years} onYearChange={setYear} />
         </section>
 
         <Methodology />

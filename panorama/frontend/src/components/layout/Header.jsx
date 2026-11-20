@@ -1,6 +1,6 @@
-import { ChevronDown, Home, PenLine, Map, Users, BookOpen } from 'lucide-react'
+import { ChevronDown, Home, PenLine, Map, Users, BookOpen, ChartPie } from 'lucide-react'
 
-const ICONS = { overview: Home, panorama: PenLine, region: Map, socio: Users, methodology: BookOpen }
+const ICONS = { overview: Home, panorama: PenLine, region: Map, socio: Users, populacao: ChartPie, methodology: BookOpen }
 
 // Cabeçalho com o único seletor de edição do site. No celular, os links vão para uma barra
 // fixa embaixo da tela, ao alcance do polegar.
@@ -20,7 +20,12 @@ export default function Header({ sections, activeSection, onNavigate, year, year
         }}
       >
         {className === 'tab-link' && <Icon size={20} aria-hidden="true" />}
-        <span>{item.label}</span>
+        {className === 'tab-link' ? <span>{item.short || item.label}</span> : (
+          <>
+            <span className={item.short ? 'nav-full has-short' : 'nav-full'}>{item.label}</span>
+            {item.short && <span className="nav-short">{item.short}</span>}
+          </>
+        )}
       </a>
     )
   })

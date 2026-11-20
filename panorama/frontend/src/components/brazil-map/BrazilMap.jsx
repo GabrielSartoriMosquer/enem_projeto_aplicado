@@ -17,8 +17,13 @@ const LABEL_OFFSETS = { GO: [-14, 6], DF: [3, -1] }
 const formatMean = (value) => value.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 
 // O estado só é selecionado no clique (ou Enter/Espaço). Passar o mouse apenas destaca e mostra
-// um balão com o nome e a média, para não trocar a seleção ao atravessar o mapa até o centro.
-export default function BrazilMap({ states, selectedUf, onSelect, areaLabel }) {
+// um balão com o nome e o valor, para não trocar a seleção ao atravessar o mapa até o centro.
+// O valor de cada estado vem em `mean`. Por padrão é uma média de notas; outras áreas passam
+// `formatValue`, `valueLabel` e `description` (ex.: percentual de inscritos sem internet).
+export default function BrazilMap({
+  states, selectedUf, onSelect, areaLabel,
+  formatValue = formatMean, valueLabel = 'Média', description,
+}) {
   const stageRef = useRef(null)
   const pathRefs = useRef({})
   const [labelPositions, setLabelPositions] = useState({})
@@ -62,7 +67,7 @@ export default function BrazilMap({ states, selectedUf, onSelect, areaLabel }) {
 
   return (
     <div className="map-stage" ref={stageRef}>
-      <svg className="brazil-map" viewBox={brazil.viewBox} role="group" aria-label={`Mapa do Brasil com a média de ${areaLabel} por estado. Clique em um estado para ver os detalhes.`}>
+      <svg className="brazil-map" viewBox={brazil.viewBox} role="group" aria-label={`${description || `Mapa do Brasil com a média de ${areaLabel} por estado`}. Clique em um estado para ver os detalhes.`}>
         {ordered.map((location) => {
           const uf = location.id.toUpperCase()
           const state = byUf[uf]
@@ -77,7 +82,7 @@ export default function BrazilMap({ states, selectedUf, onSelect, areaLabel }) {
               tabIndex="0"
               role="button"
               aria-pressed={selectedUf === uf}
-              aria-label={`${name}, ${hasData ? `média ${formatMean(state.mean)}` : 'sem dados nesta edição'}`}
+              aria-label={`${name}, ${hasData ? `${valueLabel.toLowerCase()} ${formatValue(state.mean)}` : 'sem dados nesta edição'}`}
               onMouseMove={(event) => trackHover(uf, event)}
               onMouseLeave={() => setHover(null)}
               onClick={() => onSelect(uf)}
@@ -100,15 +105,15 @@ export default function BrazilMap({ states, selectedUf, onSelect, areaLabel }) {
       {hovered && (
         <div className="map-hover" style={{ left: hover.x, top: hover.y }} aria-hidden="true">
           <strong>{hovered.name}</strong>
-          <span>{hovered.mean === null ? 'Sem dados' : `Média ${formatMean(hovered.mean)}`}</span>
+          <span>{hovered.mean === null || hovered.mean === undefined ? 'Sem dados' : `${valueLabel} ${formatValue(hovered.mean)}`}</span>
         </div>
       )}
 
       <div className="map-legend" aria-label="Legenda do mapa">
         <span className="map-legend-scale">
-          <span>{values.length ? formatMean(min) : '—'}</span>
+          <span>{values.length ? formatValue(min) : '—'}</span>
           <i className="legend-ramp" />
-          <span>{values.length ? formatMean(max) : '—'}</span>
+          <span>{values.length ? formatValue(max) : '—'}</span>
         </span>
         <span className="map-legend-note"><i className="legend-swatch no-data" /> sem dados</span>
       </div>

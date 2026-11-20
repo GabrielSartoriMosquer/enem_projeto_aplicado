@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     lake_gold_file: str = "enem_notas.parquet"
     # Onde a cópia baixada do lake fica guardada (fora do git, ver .gitignore; /tmp no Vercel).
     lake_cache_path: str = str(LAKE_CACHE_DIR / "gold/enem_notas.parquet")
+    # Contagens do perfil dos inscritos (área "Quem faz o ENEM"), geradas pelo ETL na gold.
+    population_path: str = str(PROJECT_ROOT.parent / "data/gold/enem_perfil_resumo.parquet")
+    lake_population_file: str = "enem_perfil_resumo.parquet"
+    lake_population_cache_path: str = str(LAKE_CACHE_DIR / "gold/enem_perfil_resumo.parquet")
     cors_origins: str = "http://localhost:5173,http://localhost:8080"
     api_prefix: str = "/api/v1"
 

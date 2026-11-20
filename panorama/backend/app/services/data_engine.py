@@ -259,7 +259,10 @@ class PandasEngine(DataEngine):
         for area, column in AREA_COLUMNS.items():
             values = pd.to_numeric(frame[column], errors="coerce").dropna()
             if not values.empty:
-                ranges[area] = {"min": round(float(values.min()), 1), "max": round(float(values.max()), 1)}
+                ranges[area] = {
+                    "min": round(float(values.min()), 1),
+                    "max": round(float(values.max()), 1),
+                }
         return ranges
 
     def options(self, year: int) -> dict[str, Any]:

@@ -2,8 +2,14 @@ from __future__ import annotations
 
 from app.core.config import Settings, get_settings
 from app.core.constants import AREA_LABELS
-from app.core.models import AnalysisResponse, EssayInput, ScoreInput
+from app.core.models import AnalysisResponse, EssayInput, IncomeProbabilityInput, ScoreInput
 from app.services.data_engine import DISCLAIMER, DataEngine, get_engine
+from app.services.income_model import (
+    REFERENCE_LABEL,
+    check_linked_year,
+    group_percentile,
+    income_probability,
+)
 from app.services.population import UNAVAILABLE as POPULATION_UNAVAILABLE
 from app.services.population import PopulationEngine, get_population
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -99,6 +105,30 @@ def socioeconomic(
             "area_label": AREA_LABELS[area],
             "dimension": dimension,
             "groups": engine.socioeconomic(year, area, dimension),
+            "data_source": engine.source_name,
+            "disclaimer": DISCLAIMER,
+        }
+    except Exception as exc:
+        raise translate_error(exc) from exc
+
+
+@router.post("/analysis/income-probability")
+def income_probability_route(
+    payload: IncomeProbabilityInput, engine: DataEngine = Depends(engine_dep)
+):
+    try:
+        check_linked_year(payload.year)
+        engine.validate_scores(payload.year, {payload.area: payload.score})
+        counts, reference = engine.income_counts(payload.year, payload.area, payload.score)
+        return {
+            **payload.model_dump(),
+            "area_label": AREA_LABELS[payload.area],
+            **income_probability(counts),
+            "reference": {
+                "label": REFERENCE_LABEL,
+                "n": reference.n,
+                "percentile": group_percentile(reference),
+            },
             "data_source": engine.source_name,
             "disclaimer": DISCLAIMER,
         }

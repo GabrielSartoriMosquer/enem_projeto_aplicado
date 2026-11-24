@@ -19,6 +19,12 @@ from app.core.constants import (
     UF_CODES,
     UF_NAMES,
 )
+from app.services.income_model import (
+    REFERENCE_BAND,
+    REFERENCE_SCHOOL,
+    GroupCount,
+    band_of,
+)
 from app.services.statistics import compute_score_statistics
 
 logger = logging.getLogger(__name__)
@@ -41,6 +47,21 @@ def discover_parquet_files(pattern: str) -> list[Path]:
     return []
 
 
+def collect_income_counts(rows) -> tuple[dict[str, GroupCount], GroupCount]:
+    """Soma linhas (Q006, TP_ESCOLA, n, n_ge, n_le) por faixa e para o grupo de referência."""
+    bands: dict[str, list[int]] = {}
+    reference = [0, 0, 0]
+    for q006, school, *values in rows:
+        code = band_of(str(q006))
+        totals = bands.setdefault(code, [0, 0, 0])
+        is_reference = code == REFERENCE_BAND and school == REFERENCE_SCHOOL
+        for i, value in enumerate(values):
+            totals[i] += int(value)
+            if is_reference:
+                reference[i] += int(value)
+    return {code: GroupCount(*totals) for code, totals in bands.items()}, GroupCount(*reference)
+
+
 class DataEngine(ABC):
     source_name: str
     dataset_version: str = "unknown"
@@ -56,6 +77,12 @@ class DataEngine(ABC):
 
     @abstractmethod
     def socioeconomic(self, year: int, area: str, dimension: str) -> list[dict[str, Any]]: ...
+
+    @abstractmethod
+    def income_counts(
+        self, year: int, area: str, score: float
+    ) -> tuple[dict[str, GroupCount], GroupCount]:
+        """Contagens por faixa de renda e do grupo de referência, para o income_model."""
 
     @abstractmethod
     def region_school(
@@ -177,6 +204,16 @@ class PandasEngine(DataEngine):
             }
             for _, row in grouped.iterrows()
         ]
+
+    def income_counts(
+        self, year: int, area: str, score: float
+    ) -> tuple[dict[str, GroupCount], GroupCount]:
+        column = AREA_COLUMNS[area]
+        frame = self._year(year)[["Q006", "TP_ESCOLA", column]].dropna(subset=["Q006", column])
+        frame = frame.assign(ge=frame[column] >= score, le=frame[column] <= score)
+        grouped = frame.groupby(["Q006", "TP_ESCOLA"], dropna=False, observed=True)
+        table = grouped.agg(n=("ge", "size"), ge=("ge", "sum"), le=("le", "sum")).reset_index()
+        return collect_income_counts(table.itertuples(index=False, name=None))
 
     def region_school(self, year: int, area: str, school_type: int | None = None) -> dict[str, Any]:
         frame = self._year(year)
@@ -415,6 +452,22 @@ class DuckDBEngine(DataEngine):
             }
             for code, n, mean, median, std in rows
         ]
+
+    def income_counts(
+        self, year: int, area: str, score: float
+    ) -> tuple[dict[str, GroupCount], GroupCount]:
+        self._ensure_year(year)
+        col = AREA_COLUMNS[area]
+        with self._connect() as con:
+            rows = con.execute(
+                f"""SELECT Q006, TP_ESCOLA, COUNT(*),
+                    COUNT(*) FILTER (WHERE {col} >= ?), COUNT(*) FILTER (WHERE {col} <= ?)
+                FROM {self._base()}
+                WHERE NU_ANO = ? AND Q006 IS NOT NULL AND {col} IS NOT NULL
+                GROUP BY Q006, TP_ESCOLA""",
+                [score, score, year],
+            ).fetchall()
+        return collect_income_counts(rows)
 
     def region_school(self, year: int, area: str, school_type: int | None = None) -> dict[str, Any]:
         self._ensure_year(year)

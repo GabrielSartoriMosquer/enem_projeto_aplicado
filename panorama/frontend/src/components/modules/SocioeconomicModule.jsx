@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import IncomeProbability from './IncomeProbability'
 import Loading from '../common/Loading'
 import { api } from '../../services/api'
 import { AREAS, FIRST_LINKED_YEAR, LAST_LINKED_YEAR, isLinkedYear } from '../../constants/areas'
@@ -10,7 +11,7 @@ const DIMENSIONS = [
   ['escolaridade_pai', 'Escolaridade do pai'],
 ]
 
-export default function SocioeconomicModule({ year, means, years = [], onYearChange }) {
+export default function SocioeconomicModule({ year, means, years = [], onYearChange, scores }) {
   const [area, setArea] = useState('MT')
   const [dimension, setDimension] = useState('renda')
   const [data, setData] = useState(null)
@@ -129,6 +130,8 @@ export default function SocioeconomicModule({ year, means, years = [], onYearCha
               </div>
             </>
           )}
+
+          <IncomeProbability year={year} scores={scores} />
         </>
       )}
     </div>

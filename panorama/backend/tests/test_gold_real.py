@@ -13,6 +13,7 @@ import pytest
 from app.core.config import PROJECT_ROOT
 from app.core.constants import Q001_Q002_LABELS, Q006_LABELS
 from app.services.data_engine import GoldEngine
+from app.services.income_model import income_probability
 
 GOLD = Path(
     os.environ.get(
@@ -63,3 +64,21 @@ def test_zero_scores_are_excluded(engine):
     for area in ("CN", "CH", "LC", "MT"):
         (result,) = engine.percentiles(2023, {area: 0})
         assert result["percentile"] == 0.0
+
+
+@pytest.mark.parametrize("year", range(2018, 2024))
+def test_income_model_matches_direct_count(engine, year):
+    """Bayes tem que dar o mesmo que contar direto, e o percentil o mesmo do resto do site."""
+    counts, reference = engine.income_counts(year, "MT", 700)
+    result = income_probability(counts)
+    assert result["bayes_available"]
+    assert sum(band["posterior"] for band in result["bands"]) == pytest.approx(1)
+    for band in result["bands"]:
+        direct = counts[band["code"]].n_ge / result["n_above"]
+        assert band["posterior"] == pytest.approx(direct)
+    # a chance de chegar à nota cresce de uma faixa de renda para a seguinte
+    rates = [band["likelihood"] for band in result["bands"]]
+    assert rates == sorted(rates)
+    assert reference.n > 10_000
+    (site,) = engine.percentiles(year, {"MT": 700})
+    assert result["percentile"] == pytest.approx(site["percentile"], abs=0.5)

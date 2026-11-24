@@ -25,6 +25,7 @@ data/parquet/
 backend/data/raw/
 backend/data/parquet/
 backend/data/gold/
+backend/data/lake/
 !backend/data/demo/
 
 # IDE / OS
@@ -38,3 +39,4 @@ Thumbs.db
 *.tfstate
 *.tfstate.*
 .terraform.lock.hcl
+.vercel

@@ -1,0 +1,18 @@
+# Não enviar para o Vercel: ambientes locais, segredos e dados grandes.
+.env
+.env.*
+.venv/
+**/__pycache__/
+.pytest_cache/
+.coverage
+frontend/node_modules/
+frontend/dist/
+backend/tests/
+# Cópia local da gold baixada do lake (~290 MB): no Vercel a API baixa para o /tmp.
+backend/data/lake/
+backend/data/parquet/
+backend/data/gold/
+backend/data/raw/
+infra/
+# ETL interno: não roda na API e depende de pacotes que ficaram fora do requirements.txt.
+backend/app/etl/

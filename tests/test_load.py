@@ -2,6 +2,7 @@ import duckdb
 
 from conftest import COLUNAS_ANTIGO, COLUNAS_PARTICIPANTES, COLUNAS_RESULTADOS, escrever_csv
 from enem_pja3.load.load import carregar_notas, carregar_perfil
+from enem_pja3.load.resumo import carregar_resumo_perfil
 from enem_pja3.transform.transform import transformar
 
 
@@ -94,3 +95,52 @@ def test_marca_nota_zero(dados):
         ("SC", True),
         ("SP", False),  # faltou: nota nula não é nota zero
     ]
+
+
+def test_resumo_harmoniza_perguntas_e_soma_o_total(dados):
+    # Internet: Q025 até 2023 e Q020 de 2024 em diante | computador: Q024 e Q021
+    antigo = COLUNAS_ANTIGO + ["Q024", "Q025"]
+    novo = COLUNAS_PARTICIPANTES + ["Q020", "Q021"]
+    escrever_csv(dados / "bronze/csv/ano=2018/MICRODADOS_ENEM_2018.csv", antigo, [
+        linha_antiga(2018, "SC", 2, "B") + ["A", "B"],   # sem computador, com internet
+        linha_antiga(2018, "SC", 2, "Q") + ["C", "B"],   # 2 computadores, com internet
+        linha_antiga(2018, "SP", 2, "A") + ["A", "A"],   # sem computador, sem internet
+    ])
+    escrever_csv(dados / "bronze/csv/ano=2024/PARTICIPANTES_2024.csv", novo, [
+        # Q006 = possui renda própria (B = sim); Q007 = renda da família
+        ["1", "2024", "3", "F", "1", "1", "0", "RS", "E", "F", "B", "B", "B", "A", "B"],
+        ["2", "2024", "3", "M", "3", "1", "0", "RS", "E", "F", "A", "C", "A", "B", "A"],
+    ])
+    escrever_csv(dados / "bronze/csv/ano=2024/RESULTADOS_2024.csv", COLUNAS_RESULTADOS, [])
+    for ano in (2018, 2024):
+        transformar(ano)
+    carregar_perfil()
+    resumo = carregar_resumo_perfil()
+
+    def contagem(indicador, ano):
+        return dict(consultar(resumo, f"""
+            SELECT CATEGORIA, sum(N)::INT FROM ARQUIVO
+            WHERE INDICADOR = '{indicador}' AND NU_ANO = {ano} AND RECORTE IS NULL GROUP BY 1
+        """))
+
+    assert contagem("internet", 2018) == {"sim": 2, "nao": 1}
+    assert contagem("internet", 2024) == {"nao": 1, "sim": 1}   # Q020, não a Q025
+    assert contagem("computador", 2018) == {"nenhum": 2, "dois_mais": 1}
+    assert contagem("computador", 2024) == {"um": 1, "nenhum": 1}
+    assert contagem("renda_propria", 2024) == {"sim": 1, "nao": 1}
+    assert contagem("renda_propria", 2018) == {}               # pergunta só existe a partir de 2024
+    assert contagem("renda_familiar", 2018) == {"ate_1": 1, "mais_20": 1, "nenhuma": 1}
+
+    # Por UF a soma de cada indicador é o total de inscritos que responderam
+    por_uf = dict(consultar(resumo, """
+        SELECT SG_UF_PROVA, sum(N)::INT FROM ARQUIVO
+        WHERE INDICADOR = 'sexo' AND NU_ANO = 2018 AND RECORTE IS NULL GROUP BY 1
+    """))
+    assert por_uf == {"SC": 2, "SP": 1}
+
+    # O cruzamento nacional soma o mesmo total e não tem UF
+    cruzamento = consultar(resumo, """
+        SELECT RECORTE_CATEGORIA, CATEGORIA, N::INT, SG_UF_PROVA FROM ARQUIVO
+        WHERE INDICADOR = 'computador' AND NU_ANO = 2018 AND RECORTE = 'renda' ORDER BY 1, 2
+    """)
+    assert cruzamento == [("ate_1", "nenhum", 2, None), ("mais_10", "dois_mais", 1, None)]

@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 Area = Literal["CN", "CH", "LC", "MT", "REDACAO"]
+IncomeBandCode = Literal["ate_1", "1_a_2", "2_a_4", "4_a_10", "mais_10"]
 SocioDimension = Literal["renda", "escolaridade_mae", "escolaridade_pai"]
 
 
@@ -26,6 +27,13 @@ class ScoreInput(BaseModel):
 class EssayInput(BaseModel):
     year: int = Field(ge=2018, le=2025)
     score: float = Field(ge=0, le=1000)
+
+
+class IncomeProbabilityInput(BaseModel):
+    year: int = Field(ge=2018, le=2025)
+    area: Area
+    score: float = Field(ge=0, le=1000, allow_inf_nan=False)
+    income: IncomeBandCode
 
 
 class PercentileResult(BaseModel):

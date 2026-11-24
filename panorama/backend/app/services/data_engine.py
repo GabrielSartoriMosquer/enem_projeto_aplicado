@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import glob
 import logging
+import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
 from threading import Lock
@@ -17,6 +18,12 @@ from app.core.constants import (
     SCHOOL_TYPE_LABELS,
     UF_CODES,
     UF_NAMES,
+)
+from app.services.income_model import (
+    REFERENCE_BAND,
+    REFERENCE_SCHOOL,
+    GroupCount,
+    band_of,
 )
 from app.services.statistics import compute_score_statistics
 
@@ -40,6 +47,21 @@ def discover_parquet_files(pattern: str) -> list[Path]:
     return []
 
 
+def collect_income_counts(rows) -> tuple[dict[str, GroupCount], GroupCount]:
+    """Soma linhas (Q006, TP_ESCOLA, n, n_ge, n_le) por faixa e para o grupo de referência."""
+    bands: dict[str, list[int]] = {}
+    reference = [0, 0, 0]
+    for q006, school, *values in rows:
+        code = band_of(str(q006))
+        totals = bands.setdefault(code, [0, 0, 0])
+        is_reference = code == REFERENCE_BAND and school == REFERENCE_SCHOOL
+        for i, value in enumerate(values):
+            totals[i] += int(value)
+            if is_reference:
+                reference[i] += int(value)
+    return {code: GroupCount(*totals) for code, totals in bands.items()}, GroupCount(*reference)
+
+
 class DataEngine(ABC):
     source_name: str
     dataset_version: str = "unknown"
@@ -57,6 +79,12 @@ class DataEngine(ABC):
     def socioeconomic(self, year: int, area: str, dimension: str) -> list[dict[str, Any]]: ...
 
     @abstractmethod
+    def income_counts(
+        self, year: int, area: str, score: float
+    ) -> tuple[dict[str, GroupCount], GroupCount]:
+        """Contagens por faixa de renda e do grupo de referência, para o income_model."""
+
+    @abstractmethod
     def region_school(
         self, year: int, area: str, school_type: int | None = None
     ) -> dict[str, Any]: ...
@@ -66,6 +94,25 @@ class DataEngine(ABC):
 
     @abstractmethod
     def options(self, year: int) -> dict[str, Any]: ...
+
+    @abstractmethod
+    def score_ranges(self, year: int) -> dict[str, dict[str, float]]:
+        """Menor e maior nota registrada por área na edição.
+
+        Pela TRI, a nota máxima das provas objetivas muda a cada edição e fica abaixo de 1000
+        (só a redação chega a 1000). Usado para validar as notas digitadas.
+        """
+
+    def validate_scores(self, year: int, scores: dict[str, float]) -> None:
+        ranges = self.score_ranges(year)
+        for area, score in scores.items():
+            limits = ranges.get(area)
+            if limits and not limits["min"] <= score <= limits["max"]:
+                low, high = (f"{limits[key]:.1f}".replace(".", ",") for key in ("min", "max"))
+                raise ValueError(
+                    f"Nota de {AREA_LABELS[area]} fora do possível no ENEM {year}: "
+                    f"vai de {low} a {high}."
+                )
 
     @abstractmethod
     def healthcheck(self) -> dict[str, Any]: ...
@@ -98,10 +145,13 @@ class PandasEngine(DataEngine):
         means = {}
         for area, column in AREA_COLUMNS.items():
             means[area] = round(float(pd.to_numeric(frame[column], errors="coerce").mean()), 2)
+        essays = pd.to_numeric(frame[AREA_COLUMNS["REDACAO"]], errors="coerce")
         return {
             "year": year,
             "participants": int(frame.shape[0]),
             "means": means,
+            # Redações com nota máxima: destaque do topo do site.
+            "essay_perfect": int((essays >= 1000).sum()),
             "data_source": self.source_name,
             "disclaimer": DISCLAIMER,
         }
@@ -154,6 +204,16 @@ class PandasEngine(DataEngine):
             }
             for _, row in grouped.iterrows()
         ]
+
+    def income_counts(
+        self, year: int, area: str, score: float
+    ) -> tuple[dict[str, GroupCount], GroupCount]:
+        column = AREA_COLUMNS[area]
+        frame = self._year(year)[["Q006", "TP_ESCOLA", column]].dropna(subset=["Q006", column])
+        frame = frame.assign(ge=frame[column] >= score, le=frame[column] <= score)
+        grouped = frame.groupby(["Q006", "TP_ESCOLA"], dropna=False, observed=True)
+        table = grouped.agg(n=("ge", "size"), ge=("ge", "sum"), le=("le", "sum")).reset_index()
+        return collect_income_counts(table.itertuples(index=False, name=None))
 
     def region_school(self, year: int, area: str, school_type: int | None = None) -> dict[str, Any]:
         frame = self._year(year)
@@ -230,6 +290,18 @@ class PandasEngine(DataEngine):
             "disclaimer": DISCLAIMER,
         }
 
+    def score_ranges(self, year: int) -> dict[str, dict[str, float]]:
+        frame = self._year(year)
+        ranges = {}
+        for area, column in AREA_COLUMNS.items():
+            values = pd.to_numeric(frame[column], errors="coerce").dropna()
+            if not values.empty:
+                ranges[area] = {
+                    "min": round(float(values.min()), 1),
+                    "max": round(float(values.max()), 1),
+                }
+        return ranges
+
     def options(self, year: int) -> dict[str, Any]:
         frame = self._year(year)
         return {
@@ -240,6 +312,7 @@ class PandasEngine(DataEngine):
                 {"code": int(value), "label": SCHOOL_TYPE_LABELS.get(int(value), str(value))}
                 for value in sorted(frame["TP_ESCOLA"].dropna().astype(int).unique().tolist())
             ],
+            "score_ranges": self.score_ranges(year),
         }
 
     def healthcheck(self) -> dict[str, Any]:
@@ -268,6 +341,10 @@ class DuckDBEngine(DataEngine):
     def _connect(self):
         con = self.duckdb.connect(database=":memory:")
         con.execute("PRAGMA threads=4")
+        # O padrão é ./.tmp, que não dá para gravar no Vercel; o DuckDB usa a pasta se a consulta
+        # não couber na memória.
+        temp_dir = (Path(tempfile.gettempdir()) / "duckdb").as_posix().replace("'", "''")
+        con.execute(f"SET temp_directory='{temp_dir}'")
         return con
 
     def _base(self) -> str:
@@ -297,13 +374,19 @@ class DuckDBEngine(DataEngine):
     def summary(self, year: int) -> dict[str, Any]:
         self._ensure_year(year)
         expr = ", ".join(f"AVG({col}) AS {area}" for area, col in AREA_COLUMNS.items())
-        sql = f"SELECT COUNT(*) AS n, {expr} FROM {self._base()} WHERE NU_ANO = ?"
+        essay_col = AREA_COLUMNS["REDACAO"]
+        sql = (
+            f"SELECT COUNT(*) AS n, {expr}, COUNT(*) FILTER (WHERE {essay_col} >= 1000) "
+            f"FROM {self._base()} WHERE NU_ANO = ?"
+        )
         with self._connect() as con:
             row = con.execute(sql, [year]).fetchone()
         return {
             "year": year,
             "participants": int(row[0]),
             "means": {area: round(float(row[i + 1]), 2) for i, area in enumerate(AREA_COLUMNS)},
+            # Redações com nota máxima: destaque do topo do site.
+            "essay_perfect": int(row[len(AREA_COLUMNS) + 1]),
             "data_source": self.source_name,
             "disclaimer": DISCLAIMER,
         }
@@ -369,6 +452,22 @@ class DuckDBEngine(DataEngine):
             }
             for code, n, mean, median, std in rows
         ]
+
+    def income_counts(
+        self, year: int, area: str, score: float
+    ) -> tuple[dict[str, GroupCount], GroupCount]:
+        self._ensure_year(year)
+        col = AREA_COLUMNS[area]
+        with self._connect() as con:
+            rows = con.execute(
+                f"""SELECT Q006, TP_ESCOLA, COUNT(*),
+                    COUNT(*) FILTER (WHERE {col} >= ?), COUNT(*) FILTER (WHERE {col} <= ?)
+                FROM {self._base()}
+                WHERE NU_ANO = ? AND Q006 IS NOT NULL AND {col} IS NOT NULL
+                GROUP BY Q006, TP_ESCOLA""",
+                [score, score, year],
+            ).fetchall()
+        return collect_income_counts(rows)
 
     def region_school(self, year: int, area: str, school_type: int | None = None) -> dict[str, Any]:
         self._ensure_year(year)
@@ -437,6 +536,23 @@ class DuckDBEngine(DataEngine):
             "disclaimer": DISCLAIMER,
         }
 
+    def score_ranges(self, year: int) -> dict[str, dict[str, float]]:
+        # Uma varredura por edição; o resultado não muda enquanto a API está no ar.
+        cache = self.__dict__.setdefault("_score_ranges", {})
+        if year not in cache:
+            self._ensure_year(year)
+            expr = ", ".join(f"MIN({col}), MAX({col})" for col in AREA_COLUMNS.values())
+            with self._connect() as con:
+                row = con.execute(
+                    f"SELECT {expr} FROM {self._base()} WHERE NU_ANO = ?", [year]
+                ).fetchone()
+            cache[year] = {
+                area: {"min": round(float(row[2 * i]), 1), "max": round(float(row[2 * i + 1]), 1)}
+                for i, area in enumerate(AREA_COLUMNS)
+                if row[2 * i] is not None
+            }
+        return cache[year]
+
     def options(self, year: int) -> dict[str, Any]:
         self._ensure_year(year)
         with self._connect() as con:
@@ -455,6 +571,7 @@ class DuckDBEngine(DataEngine):
             "school_types": [
                 {"code": int(v), "label": SCHOOL_TYPE_LABELS.get(int(v), str(v))} for v in schools
             ],
+            "score_ranges": self.score_ranges(year),
         }
 
     def healthcheck(self) -> dict[str, Any]:
@@ -565,6 +682,48 @@ _engine_lock = Lock()
 
 
 def build_engine(settings: Settings) -> DataEngine:
+    """Escolhe a fonte de dados e registra de onde ela veio em ``engine.data_origin``."""
+    resolved, origin = _resolve_gold(settings)
+    engine = _build_engine(resolved)
+    if origin == "azure" and not isinstance(engine, GoldEngine):
+        # A gold do lake veio, mas não serve (ex.: gerada por um ETL antigo, sem IN_NOTA_ZERO).
+        # Melhor a gold local do que cair nos dados de demonstração.
+        logger.error(
+            "A gold do data lake é inválida para a API; usando a gold local. "
+            "Rode o ETL com o lake configurado para enviar a versão atual."
+        )
+        engine, origin = _build_engine(settings), "local"
+    if engine.source_name == "demo":
+        engine.data_origin = "demo"
+    elif isinstance(engine, GoldEngine):
+        engine.data_origin = origin
+    else:
+        engine.data_origin = "local"
+    return engine
+
+
+def _resolve_gold(settings: Settings) -> tuple[Settings, str]:
+    """Com o lake configurado, troca a gold local pela cópia sincronizada do Azure.
+
+    Se o lake falhar (sem login, sem rede), o modo ``official`` para com erro; o modo ``auto``
+    registra o erro e segue com a gold local, e o /health mostra ``data_origin: local``.
+    """
+    from app.services import lake
+
+    if settings.normalized_data_mode == "demo" or not lake.lake_enabled(settings):
+        return settings, "local"
+    try:
+        path = lake.sync_gold(settings)
+    except Exception as exc:
+        if settings.normalized_data_mode == "official":
+            raise RuntimeError("Não foi possível obter a camada gold do data lake.") from exc
+        logger.error("Falha ao obter a gold do data lake; usando a gold local. %s", exc)
+        return settings, "local"
+    logger.info("Usando a gold do data lake no Azure (cache em %s)", path)
+    return settings.model_copy(update={"gold_path": str(path)}), "azure"
+
+
+def _build_engine(settings: Settings) -> DataEngine:
     mode = settings.normalized_data_mode
     parquet_candidates = discover_parquet_files(settings.parquet_glob)
 

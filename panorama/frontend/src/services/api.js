@@ -38,6 +38,9 @@ export const api = {
   socioeconomic: (year, area, dimension) => request(
     `/analysis/socioeconomic?year=${year}&area=${area}&dimension=${dimension}`,
   ),
+  incomeProbability: (year, area, score, income) => request('/analysis/income-probability', {
+    method: 'POST', body: JSON.stringify({ year, area, score: Number(score), income }),
+  }),
   regionSchool: (year, area, schoolType = '') => request(
     `/analysis/region-school?year=${year}&area=${area}${schoolType ? `&school_type=${schoolType}` : ''}`,
   ),

@@ -283,6 +283,31 @@ main:focus { outline: none; }
 .socio-label { display: grid; font-size: 15px; font-weight: 500; }
 .socio-label small { color: var(--muted); font-size: 13px; font-weight: 400; }
 
+/* Probabilidade condicional por renda */
+.income-model { margin-top: 40px; padding-top: 32px; border-top: 1px solid var(--border); }
+.income-model h3 { margin: 0; color: var(--navy); font: 600 24px/1.25 'Space Grotesk', sans-serif; }
+.income-intro { max-width: 760px; margin: 10px 0 0; color: var(--muted); font-size: 16px; line-height: 1.6; }
+.income-model .score-field { min-width: 140px; }
+.income-submit { align-self: end; min-height: 50px; }
+.income-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.income-card { display: grid; align-content: start; gap: 6px; padding: 20px 22px; border: 1px solid var(--border); border-radius: 16px; background: #fff; }
+.income-card.accent { border-color: var(--teal); background: #f1faf9; }
+.income-card span { min-height: 2.8em; color: var(--ink); font-size: 15px; font-weight: 600; line-height: 1.4; }
+.income-card strong { color: var(--navy); font: 600 36px/1 'Space Grotesk', sans-serif; font-variant-numeric: tabular-nums; }
+.income-card small { color: var(--muted); font-size: 13px; }
+.income-answers { display: grid; gap: 10px; max-width: 860px; margin: 24px 0; padding-left: 20px; color: var(--ink); font-size: 17px; line-height: 1.6; }
+.income-details { border: 1px solid var(--border); border-radius: 16px; background: #fff; }
+.income-details summary { padding: 16px 22px; color: var(--teal); font-weight: 600; cursor: pointer; }
+.income-details > p { margin: 0; padding: 4px 22px 20px; color: var(--muted); font-size: 15px; line-height: 1.6; }
+.income-table { overflow-x: auto; padding: 0 22px; }
+.income-table table { width: 100%; border-collapse: collapse; font-size: 15px; font-variant-numeric: tabular-nums; }
+.income-table caption { padding-bottom: 10px; color: var(--muted); font-size: 14px; text-align: left; }
+.income-table th, .income-table td { padding: 10px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+.income-table th:first-child { text-align: left; }
+.income-table tr.current { background: #f1faf9; }
+.income-table tfoot th, .income-table tfoot td { font-weight: 600; }
+.income-note { max-width: 860px; margin: 16px 0 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
+
 /* Quem faz o ENEM */
 .pop-lead { margin: 24px 0 14px; color: var(--ink); font-size: 18px; }
 .pop-lead strong { color: var(--navy); font-family: 'Space Grotesk', sans-serif; }
@@ -440,6 +465,9 @@ main:focus { outline: none; }
   .section-heading h2 { font-size: 28px; }
   .filter-row { flex-direction: column; }
   .filter-field { min-width: 0; }
+  .income-cards { grid-template-columns: 1fr; }
+  .income-card span { min-height: 0; }
+  .income-submit { align-self: stretch; }
   .panorama-form { padding: 16px; }
   .panorama-score-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .panorama-submit { justify-self: stretch; }

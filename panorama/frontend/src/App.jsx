@@ -247,7 +247,7 @@ function App() {
         </section>
 
         <section className="module-shell" id="socio">
-          <SocioeconomicModule year={year} means={summary?.means} years={years} onYearChange={setYear} />
+          <SocioeconomicModule year={year} means={summary?.means} years={years} onYearChange={setYear} scores={scores} />
         </section>
 
         <section className="module-shell" id="populacao">

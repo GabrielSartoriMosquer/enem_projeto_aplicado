@@ -968,3 +968,379 @@ def test_propriedade_ida_e_volta_resultados_json(resultados):
         lido = json.loads(destino.read_text(encoding="utf-8"))
     # == trata 0.0 e −0.0 como iguais; floats finitos voltam exatos (repr de ida e volta)
     assert lido == resultados
+
+
+# --- Independência da ordem das linhas (tarefa 4.5) ---
+
+# Notas com poucos valores distintos, para gerar empates: objetivas de 0 a 1000 em passos de
+# 12,5 (cabem em DECIMAL(5,1)) e redação de 0 a 1000 em passos de 20.
+NOTA_OBJETIVA = st.integers(min_value=0, max_value=80).map(lambda k: k * 12.5)
+NOTA_REDACAO = st.integers(min_value=0, max_value=50).map(lambda k: k * 20)
+RARO = st.integers(min_value=0, max_value=9).map(lambda k: k == 0)  # verdadeiro em ~1 de 10
+
+
+@st.composite
+def linha_gold(draw):
+    """Um participante da gold sintética com tudo o que muda a inclusão variando.
+
+    Rede de 1 a 4, nula ou fora da faixa (0 e 5, contadas como sem rede); presença, nota nula,
+    IN_NOTA_ZERO e status da redação variados; edição 2018 (formato antigo) ou 2024 (novo).
+    Os casos de exclusão são raros, para que a maioria fique na Amostra_Valida e as medidas
+    sejam calculadas.
+    """
+    extra = {}
+    for area in rede_escolar.AREAS_OBJETIVAS:
+        extra[f"TP_PRESENCA_{area}"] = draw(st.sampled_from([1, 1, 1, 1, 0, 2]))
+        extra[f"NU_NOTA_{area}"] = None if draw(RARO) else draw(NOTA_OBJETIVA)
+    extra["NU_NOTA_REDACAO"] = None if draw(RARO) else draw(NOTA_REDACAO)
+    extra["TP_STATUS_REDACAO"] = draw(st.sampled_from([1, 1, 1, 1, 1, 2, 4, None]))
+    linha = participante(
+        ano=draw(st.sampled_from([2018, 2024])),
+        rede=draw(st.sampled_from([1, 2, 3, 4, 1, 2, 3, 4, None, 0, 5])),
+        **extra,
+    )
+    if draw(RARO):
+        linha["IN_NOTA_ZERO"] = True
+    return linha
+
+
+# Feature: rede-escolar-estrutura-areas, Property 17: Independência da ordem das linhas
+@settings(max_examples=100, deadline=None)
+@given(linhas=st.lists(linha_gold(), min_size=10, max_size=40), data=st.data())
+def test_propriedade_independencia_da_ordem_das_linhas(linhas, data):
+    """**Validates: Requirements 18.2**"""
+    permutadas = data.draw(st.permutations(linhas), label="permutadas")
+    resultados = []
+    # TemporaryDirectory em vez de tmp_path: a fixture de função não é recriada a cada exemplo
+    with tempfile.TemporaryDirectory() as pasta:
+        for nome, versao in (("original", linhas), ("permutada", permutadas)):
+            gold = gravar_gold_sintetica(Path(pasta) / nome, versao)
+            con = rede_escolar.conectar()
+            try:
+                # min_grupo baixo para que as comparações, percentis e razões sejam calculados
+                resultados.append(rede_escolar.processar(con, gold, min_grupo=2, semente=42))
+            finally:
+                con.close()
+    # processar não grava a data da execução (entra no script), então o objeto inteiro é comparado
+    original, permutado = resultados
+    assert permutado == original
+
+
+# --- Erros e execução completa do script (tarefa 5.5) ---
+
+def _gold_quatro_redes(tmp_path):
+    """Gold sintética com as quatro redes e participantes sem rede em 2018 e 2024.
+
+    Quatro participantes por rede e edição, com notas diferentes entre si (desvio maior que zero),
+    então tudo é calculado com --min-grupo 2.
+    """
+    linhas = []
+    for ano in (2018, 2024):
+        for rede in (1, 2, 3, 4):
+            for i in range(4):
+                base = 400.0 + 40 * rede + 15 * i + (ano - 2018)
+                linhas.append(participante(
+                    ano=ano, rede=rede, cn=base, ch=base + 10, lc=base - 5,
+                    mt=base + 20 * (rede % 2), redacao=500 + 40 * i + 20 * rede,
+                ))
+        linhas.append(participante(ano=ano, rede=None, cn=480.0))
+    return gravar_gold_sintetica(tmp_path, linhas)
+
+
+def test_script_gold_ausente(tmp_path, capsys):
+    """Requisito 17.1: código diferente de zero, caminho procurado e comandos para obter a gold."""
+    gold = tmp_path / "nao_existe" / "enem_notas.parquet"
+    saida = tmp_path / "saida"
+    codigo = carregar_analise().main(["--gold", str(gold), "--saida", str(saida)])
+    erro = capsys.readouterr().err
+    assert codigo != 0
+    assert str(gold) in erro
+    assert "uv run enem-pja3" in erro
+    assert "AZURE_STORAGE_ACCOUNT=" in erro
+    assert not saida.exists()
+
+
+def test_script_coluna_ausente(tmp_path, capsys):
+    """Requisito 17.2: a mensagem lista cada coluna obrigatória que falta."""
+    faltando = ["IN_NOTA_ZERO", "TP_STATUS_REDACAO", "TP_DEPENDENCIA_ADM_ESC"]
+    assert set(faltando) <= set(rede_escolar.COLUNAS_OBRIGATORIAS)
+    gold = gravar_gold_sintetica(tmp_path, [participante()], sem_colunas=faltando)
+    saida = tmp_path / "saida"
+    codigo = carregar_analise().main(["--gold", str(gold), "--saida", str(saida)])
+    erro = capsys.readouterr().err
+    assert codigo != 0
+    assert all(coluna in erro for coluna in faltando)
+    presentes = set(rede_escolar.COLUNAS_OBRIGATORIAS) - set(faltando)
+    linhas_erro = {linha.strip() for linha in erro.splitlines()}
+    assert not presentes & linhas_erro  # só as ausentes aparecem listadas
+    assert not saida.exists()
+
+
+def test_script_gold_ilegivel(tmp_path, capsys):
+    """Arquivo no caminho da gold que não é Parquet: erro claro em vez de traceback."""
+    gold = tmp_path / "enem_notas.parquet"
+    gold.write_text("isto não é parquet", encoding="utf-8")
+    codigo = carregar_analise().main(["--gold", str(gold), "--saida", str(tmp_path / "saida")])
+    erro = capsys.readouterr().err
+    assert codigo != 0
+    assert str(gold) in erro and "Parquet" in erro
+
+
+def test_script_execucao_completa(tmp_path):
+    """Requisitos 14.1, 14.4 e 14.5: grava JSON, relatório e as quatro figuras citadas no relatório."""
+    analise = carregar_analise()
+    gold = _gold_quatro_redes(tmp_path)
+    saida = tmp_path / "saida"
+    assert analise.main(["--gold", str(gold), "--saida", str(saida), "--min-grupo", "2"]) == 0
+
+    dados = json.loads((saida / analise.NOME_JSON).read_text(encoding="utf-8"))
+    meta = dados["metadados"]
+    assert meta["edicoes_processadas"] == [2018, 2024]
+    assert meta["edicoes_ausentes"] == [2019, 2020, 2021, 2022, 2023, 2025]
+    assert meta["parametros"]["min_grupo"] == 2
+    assert set(dados["edicoes"]) == {"2018", "2024"}
+    comparacao = dados["edicoes"]["2018"]["comparacoes"]["privada_vs_publica"]["MT"]
+    assert 0 <= comparacao["prob_superioridade"]["valor"] <= 1
+
+    relatorio = (saida / analise.NOME_RELATORIO).read_text(encoding="utf-8")
+    assert len(analise.FIGURAS) == 4
+    for nome in analise.FIGURAS.values():
+        figura = saida / analise.PASTA_FIGURAS / nome
+        assert figura.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+        assert f"{analise.PASTA_FIGURAS}/{nome}" in relatorio
+    assert str(saida) not in relatorio  # caminhos relativos, não absolutos
+
+
+def test_script_anos_com_edicao_ausente(tmp_path, capsys):
+    """Requisitos 17.3 e 18.3 pelo script: só as edições pedidas, a ausente registrada."""
+    analise = carregar_analise()
+    gold = _gold_quatro_redes(tmp_path)
+    saida = tmp_path / "saida"
+    argv = ["--gold", str(gold), "--saida", str(saida), "--min-grupo", "2", "--anos", "2018", "2019"]
+    assert analise.main(argv) == 0
+    assert "Edições sem linhas na gold: 2019" in capsys.readouterr().out
+
+    meta = json.loads((saida / analise.NOME_JSON).read_text(encoding="utf-8"))["metadados"]
+    assert meta["edicoes_processadas"] == [2018]
+    assert meta["edicoes_ausentes"] == [2019]
+    relatorio = (saida / analise.NOME_RELATORIO).read_text(encoding="utf-8")
+    assert "sem linhas na gold, fora da análise: 2019" in relatorio
+
+
+# --- Testes de exemplo de processar sobre a Gold_Sintetica (tarefa 4.4) ---
+
+def _linhas_inclusao_processar():
+    """Edição 2018 com um caso de cada critério de inclusão e de cada rede, mais uma linha de 2019.
+
+    Participantes de 2018 (12):
+      1–4  federal, estadual, municipal e privada, válidos em todas as áreas
+      5–7  rede nula, 0 e 7: sem rede informada, válidos em todas as áreas
+      8    privada que faltou a CN                   → sai de CN por presença
+      9    estadual presente em MT, sem nota          → sai de MT por nota nula
+      10   estadual com IN_NOTA_ZERO                  → sai de todas as áreas
+      11   privada com redação de status 3            → sai da redação por status
+      12   municipal que faltou ao dia de LC          → sai de LC e da redação por presença
+    """
+    return [
+        participante(rede=1, cn=600.0),
+        participante(rede=2, cn=500.0),
+        participante(rede=3, cn=450.0),
+        participante(rede=4, cn=700.0),
+        participante(rede=None, cn=520.0),
+        participante(rede=0, cn=530.0),
+        participante(rede=7, cn=540.0),
+        participante(rede=4, TP_PRESENCA_CN=0, NU_NOTA_CN=None),
+        participante(rede=2, NU_NOTA_MT=None),
+        participante(rede=2, IN_NOTA_ZERO=True),
+        participante(rede=4, TP_STATUS_REDACAO=3),
+        participante(rede=3, TP_PRESENCA_LC=0, NU_NOTA_LC=None, NU_NOTA_REDACAO=None),
+        participante(ano=2019, rede=4, cn=999.0),
+    ]
+
+
+def _edicao_com_cobertura(ano, com_rede, sem_rede):
+    """com_rede participantes alternando estadual e privada, mais sem_rede sem rede informada."""
+    return (
+        [participante(ano=ano, rede=(2, 4)[i % 2], cn=400.0 + 10 * i) for i in range(com_rede)]
+        + [participante(ano=ano, rede=None) for _ in range(sem_rede)]
+    )
+
+
+def test_processar_inclusao_e_rede_sem_informacao(tmp_path):
+    gold = gravar_gold_sintetica(tmp_path, _linhas_inclusao_processar())
+    con = rede_escolar.conectar()
+    edicao = rede_escolar.processar(con, gold, anos=[2018], min_grupo=1)["edicoes"]["2018"]
+
+    # Total da edição (a linha de 2019 não entra), exclusões em cascata e amostra final (Req 1.1–1.3)
+    assert edicao["inclusao"] == {
+        "CN": {"total": 12, "excluidos": {"presenca": 1, "nota_nula": 0, "nota_zero": 1},
+               "amostra_valida": 10},
+        "CH": {"total": 12, "excluidos": {"presenca": 0, "nota_nula": 0, "nota_zero": 1},
+               "amostra_valida": 11},
+        "LC": {"total": 12, "excluidos": {"presenca": 1, "nota_nula": 0, "nota_zero": 1},
+               "amostra_valida": 10},
+        "MT": {"total": 12, "excluidos": {"presenca": 0, "nota_nula": 1, "nota_zero": 1},
+               "amostra_valida": 10},
+        "REDACAO": {"total": 12, "excluidos": {"presenca": 1, "status_redacao": 1, "nota_nula": 0,
+                                               "nota_zero": 1},
+                    "amostra_valida": 9},
+    }
+
+    # Contagem por rede na amostra válida (federal, estadual, municipal, privada, sem_rede):
+    # rede nula, 0 e 7 contam como sem rede informada em todas as áreas (Req 2.3 e 3.2)
+    contagens = {
+        "CN": (1, 2, 2, 2, 3), "CH": (1, 2, 2, 3, 3), "LC": (1, 2, 1, 3, 3),
+        "MT": (1, 1, 2, 3, 3), "REDACAO": (1, 2, 1, 2, 3),
+    }
+    for area, esperado in contagens.items():
+        cob = edicao["cobertura"][area]
+        n = edicao["inclusao"][area]["amostra_valida"]
+        assert {grupo: r["n"] for grupo, r in cob["por_rede"].items()} == dict(zip(rede_escolar.GRUPOS_REDE, esperado))
+        assert all(r["proporcao"] == r["n"] / n for r in cob["por_rede"].values())
+        assert (cob["n"], cob["n_rede_informada"]) == (n, n - 3)
+        assert cob["taxa_preenchimento"] == (n - 3) / n
+        # O registro montado a partir dos histogramas é igual ao da consulta de cobertura()
+        assert cob == rede_escolar.cobertura(con, gold, 2018, area)
+        # Os sem rede ficam no Topo_10 da amostra inteira, mas fora das comparações entre redes
+        assert edicao["representacao_topo10"][area]["n"] == n
+        comparacao = edicao["comparacoes"]["privada_vs_publica"][area]
+        assert comparacao["calculado"] is True
+        assert (comparacao["n_a"], comparacao["n_b"]) == (esperado[3], sum(esperado[:3]))
+    con.close()
+
+
+def test_processar_alerta_de_cobertura_entre_formatos(tmp_path):
+    con = rede_escolar.conectar()
+    # Formato antigo: 2018 com taxa 1 e 2019 com 8/10 → média 0,9. Formato novo: 2024 com 10/20 e
+    # 2025 com 6/10 → média 0,55. Diferença de 35 p.p. > 5: alerta em todas as áreas (Req 3.3 e 3.4)
+    gold = gravar_gold_sintetica(tmp_path / "alerta", (
+        _edicao_com_cobertura(2018, 10, 0) + _edicao_com_cobertura(2019, 8, 2)
+        + _edicao_com_cobertura(2024, 10, 10) + _edicao_com_cobertura(2025, 6, 4)
+    ))
+    formato = rede_escolar.processar(con, gold, min_grupo=1)["cobertura_formato"]
+    assert list(formato) == list(rede_escolar.AREAS)
+    for registro in formato.values():
+        assert registro["media_formato_antigo"] == pytest.approx(0.9)
+        assert registro["media_formato_novo"] == pytest.approx(0.55)
+        assert registro["dif_pp"] == pytest.approx(35.0)
+        assert registro["alerta"] is True
+
+    # 2024 com taxa 24/25 = 0,96: diferença de 4 p.p., sem alerta
+    gold = gravar_gold_sintetica(tmp_path / "sem_alerta",
+                                 _edicao_com_cobertura(2018, 10, 0) + _edicao_com_cobertura(2024, 24, 1))
+    formato = rede_escolar.processar(con, gold, min_grupo=1)["cobertura_formato"]
+    assert all(r["dif_pp"] == pytest.approx(4.0) and r["alerta"] is False for r in formato.values())
+
+    # Só 2018 pedida: sem edição do formato novo, a diferença fica sem valor e sem alerta, com motivo
+    formato = rede_escolar.processar(con, gold, anos=[2018], min_grupo=1)["cobertura_formato"]
+    assert all(r["dif_pp"] is None and r["alerta"] is False and r["motivo"] for r in formato.values())
+    con.close()
+
+
+def test_processar_edicoes_ausentes_e_filtro_de_anos(tmp_path):
+    # Uma estadual (CN 500) e uma privada (CN 700) em 2018, 2020 e 2024; as outras edições sem linhas
+    linhas = [participante(ano=ano, rede=rede, cn=cn)
+              for ano in (2018, 2020, 2024) for rede, cn in ((2, 500.0), (4, 700.0))]
+    gold = gravar_gold_sintetica(tmp_path, linhas)
+    con = rede_escolar.conectar()
+
+    # Sem lista de anos: as oito edições são pedidas e as sem linhas ficam como ausentes (Req 17.3)
+    todas = rede_escolar.processar(con, gold, min_grupo=1)
+    assert todas["metadados"] == {
+        "parametros": {"anos": list(range(2018, 2026)), "min_grupo": 1, "semente": 42},
+        "edicoes_processadas": [2018, 2020, 2024],
+        "edicoes_ausentes": [2019, 2021, 2022, 2023, 2025],
+    }
+    assert list(todas["edicoes"]) == ["2018", "2020", "2024"]
+    assert todas["estabilidade"]["edicoes"] == [2018, 2020, 2024]
+    assert todas["estabilidade"]["kendall_w"] == 1.0
+
+    # Com lista (--anos): só as pedidas, em ordem crescente; a pedida sem linhas é ausente (Req 18.3)
+    filtrado = rede_escolar.processar(con, gold, anos=[2024, 2019, 2018], min_grupo=1, semente=7)
+    assert filtrado["metadados"] == {
+        "parametros": {"anos": [2018, 2019, 2024], "min_grupo": 1, "semente": 7},
+        "edicoes_processadas": [2018, 2024],
+        "edicoes_ausentes": [2019],
+    }
+    assert list(filtrado["edicoes"]) == ["2018", "2024"]
+    assert list(filtrado["estabilidade"]["spearman"]) == ["2018-2024"]
+    # Cada edição é calculada só com as próprias linhas: não muda com as outras pedidas
+    assert filtrado["edicoes"]["2018"] == todas["edicoes"]["2018"]
+
+    # Uma edição só: não há estabilidade entre edições
+    uma = rede_escolar.processar(con, gold, anos=[2020], min_grupo=1)
+    assert list(uma["edicoes"]) == ["2020"] and uma["metadados"]["edicoes_ausentes"] == []
+    assert uma["estabilidade"]["kendall_w"]["calculado"] is False
+    assert uma["estabilidade"]["spearman"] == {}
+    con.close()
+
+
+def test_processar_taxa_de_preenchimento_zero_e_grupos_pequenos(tmp_path):
+    # 2018: privada (700, redação 800) e estadual (500, redação 600) faltaram a MT, então a amostra
+    # de MT só tem os sem rede (taxa zero em MT). 2024: ninguém com rede informada.
+    sem_mt = {"TP_PRESENCA_MT": 0, "NU_NOTA_MT": None}
+    linhas = (
+        [participante(rede=4, cn=700.0, ch=700.0, lc=700.0, redacao=800, **sem_mt) for _ in range(3)]
+        + [participante(rede=2, **sem_mt) for _ in range(3)]
+        + [participante(rede=None) for _ in range(3)]
+        + [participante(ano=2024, rede=None) for _ in range(3)]
+    )
+    gold = gravar_gold_sintetica(tmp_path, linhas)
+    con = rede_escolar.conectar()
+    resultados = rede_escolar.processar(con, gold, anos=[2018, 2024], min_grupo=1)
+    edicao = resultados["edicoes"]["2018"]
+
+    # MT com taxa zero: comparações entre redes não calculadas, com o motivo (Req 17.4)
+    assert edicao["cobertura"]["MT"]["n"] == 3
+    assert edicao["cobertura"]["MT"]["taxa_preenchimento"] == 0.0
+    for por_area in edicao["comparacoes"].values():
+        registro = por_area["MT"]
+        assert registro["calculado"] is False and registro["n"] == 0
+        assert "taxa de preenchimento igual a zero" in registro["motivo"]
+    assert len(edicao["alertas"]) == 1 and edicao["alertas"][0].startswith("MT:")
+    assert edicao["posicao_federal"]["MT"]["calculado"] is False
+    assert all(not r["calculado"] for r in edicao["percentil_mediano"]["MT"].values())
+    assert all(not r["calculado"] for r in edicao["representacao_topo10"]["MT"]["por_rede"].values())
+    assert all(not r["calculado"] for r in edicao["medias"]["MT"].values())
+
+    # Nas outras áreas a privada (700) vence a estadual (500) em todos os pares: AUC = 1. As duas
+    # redes têm nota constante, então o desvio combinado é zero e o d fica sem valor (Req 6.4)
+    cn = edicao["comparacoes"]["privada_vs_estadual"]["CN"]
+    assert cn["calculado"] is True and cn["prob_superioridade"]["valor"] == 1.0
+    assert cn["cohen_d"]["calculado"] is False and "desvio" in cn["cohen_d"]["motivo"]
+    # Rede sem participantes (federal) fica abaixo do mínimo, com n = 0 (Req 5.6)
+    federal = edicao["comparacoes"]["privada_vs_federal"]["CN"]
+    assert federal["calculado"] is False and federal["n"] == 0 and "mínimo" in federal["motivo"]
+    # MT fica fora do ranking; as outras empatam em AUC 1 e seguem a ordem de AREAS
+    assert edicao["ranking_areas"] == ["CN", "CH", "LC", "REDACAO"]
+
+    # 2024: taxa zero em todas as áreas, um alerta por área, nada comparado e ranking vazio
+    edicao_2024 = resultados["edicoes"]["2024"]
+    assert [alerta.split(":")[0] for alerta in edicao_2024["alertas"]] == list(rede_escolar.AREAS)
+    assert all(not registro["calculado"]
+               for por_area in edicao_2024["comparacoes"].values() for registro in por_area.values())
+    assert edicao_2024["ranking_areas"] == []
+    assert resultados["estabilidade"]["edicoes"] == [2018]
+
+    # Grupos de 3 com min_grupo = 4: nenhuma comparação calculada, com o tamanho registrado (Req 5.6)
+    pequeno = rede_escolar.processar(con, gold, anos=[2018], min_grupo=4)["edicoes"]["2018"]
+    registro = pequeno["comparacoes"]["privada_vs_estadual"]["CN"]
+    assert registro["calculado"] is False and "mínimo de 4" in registro["motivo"]
+    assert (registro["n"], registro["n_a"], registro["n_b"]) == (3, 3, 3)
+    assert pequeno["ranking_areas"] == []
+    con.close()
+
+
+def test_processar_idempotente(tmp_path):
+    # Mesma gold e mesmos parâmetros, na mesma conexão e numa conexão nova: mesmo objeto (Req 18.1)
+    gold = gravar_gold_sintetica(tmp_path, _linhas_inclusao_processar() + _edicao_com_cobertura(2024, 10, 10))
+    con = rede_escolar.conectar()
+    primeira = rede_escolar.processar(con, gold, min_grupo=1)
+    segunda = rede_escolar.processar(con, gold, min_grupo=1)
+    con.close()
+    con = rede_escolar.conectar()
+    terceira = rede_escolar.processar(con, gold, min_grupo=1)
+    con.close()
+    assert primeira == segunda == terceira
+    # Só tipos de JSON com números finitos, e o texto serializado também é idêntico
+    assert json.dumps(primeira, sort_keys=True, allow_nan=False) == json.dumps(terceira, sort_keys=True, allow_nan=False)

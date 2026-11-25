@@ -137,6 +137,29 @@ az role assignment create --role "Storage Blob Data Contributor" --assignee <ema
   --scope $(az storage account show -g rg-panorama-enem -n stpanoramaenem --query id -o tsv)
 ```
 
+## Análise da rede escolar
+
+Análise do Gabriel para o relatório técnico: compara as redes federal, estadual, municipal e
+privada nas cinco áreas, de 2018 a 2025. Como a escala da TRI muda a cada ano, toda medida é
+calculada dentro de uma edição e entre edições só entram medidas relativas (probabilidade de
+superioridade, d de Cohen, percentil e razão de representação no topo 10%). Precisa da gold
+`data/gold/enem_notas.parquet`; sem ela o script para e mostra como gerar ou baixar do lake.
+
+```bash
+uv sync
+uv run python analises/rede_escolar/analise.py
+uv run python analises/rede_escolar/analise.py --anos 2023 2024 --min-grupo 50
+```
+
+Parâmetros: `--gold` (padrão `data/gold/enem_notas.parquet`), `--saida` (padrão
+`analises/rede_escolar/saida/`), `--anos` (padrão: todos os anos da gold), `--min-grupo` (tamanho
+mínimo de um grupo para calcular uma medida, padrão 100) e `--semente` (padrão 42).
+
+A saída tem o `resultados.json`, as figuras em `figuras/` e o `RELATORIO.md`
+(`analises/rede_escolar/saida/RELATORIO.md`), com as tabelas, as limitações e o rascunho das
+seções 1.1 a 1.3 do capítulo. A pasta `saida/` está no `.gitignore`: quem rodar na gold real manda
+o conteúdo de `analises/rede_escolar/saida/` para o Gabriel, que decide o que sobe (`git add -f`).
+
 ## Testes
 
 ```bash
@@ -149,6 +172,9 @@ os valores nulos, o contrato de colunas e a harmonização do questionário.
 Se a gold já foi gerada, `tests/test_qualidade_gold.py` também confere os dados de verdade:
 presença e nota coerentes, notas na escala, redação de 20 em 20, as 27 UFs em todos os anos e o
 mesmo número de linhas em `enem_notas` e `enem_perfil`.
+
+Os testes da análise da rede escolar (`tests/test_rede_escolar.py`) usam uma gold pequena criada
+na hora. Com a gold de verdade, `tests/test_rede_escolar_gold_real.py` roda a análise completa.
 
 ## Arquivos
 

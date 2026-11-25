@@ -18,5 +18,9 @@ data/
 # Testes
 .coverage
 
+# Saídas da análise da rede escolar: o Gabriel decide o que sobe (git add -f)
+analises/rede_escolar/saida/*
+!analises/rede_escolar/saida/.gitkeep
+
 # Connection string do data lake
 .env
